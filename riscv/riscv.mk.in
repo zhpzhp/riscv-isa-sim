@@ -283,6 +283,7 @@ riscv_insn_list = \
 	sub \
 	subw \
 	sw \
+	vaddi \
 	wfi \
 	xor \
 	xori \

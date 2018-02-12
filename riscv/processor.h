@@ -88,10 +88,12 @@ struct state_t
   void reset();
 
   static const int num_triggers = 4;
+  static const reg_t MAX_VLEN = 8;
 
   reg_t pc;
   regfile_t<reg_t, NXPR, true> XPR;
   regfile_t<freg_t, NFPR, false> FPR;
+  regfile_t<reg_t, NVR, true> VR[MAX_VLEN];
 
   // control and status registers
   reg_t prv;    // TODO: Can this be an enum instead?
@@ -124,6 +126,9 @@ struct state_t
   uint32_t fflags;
   uint32_t frm;
   bool serialized; // whether timer CSRs are in a well-defined state
+
+  vtype_t vtype[NVR];
+  reg_t vl;
 
   // When true, execute a single instruction and then enter debug mode.  This
   // can only be set by executing dret.

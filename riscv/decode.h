@@ -26,6 +26,7 @@ typedef uint64_t reg_t;
 
 const int NXPR = 32;
 const int NFPR = 32;
+const int NVR = 32;
 const int NCSR = 4096;
 
 #define X_RA 1
@@ -100,6 +101,11 @@ public:
   uint64_t rvc_rs2() { return x(2, 5); }
   uint64_t rvc_rs1s() { return 8 + x(7, 3); }
   uint64_t rvc_rs2s() { return 8 + x(2, 3); }
+
+  int64_t rvv_imm() { return x(20, 8); }
+  int64_t rvv_load_imm() { return x(27, 5); }
+  int64_t rvv_store_imm() { return x(7, 5); }
+  uint64_t rvv_mask() { return x(12, 2); }
 private:
   insn_bits_t b;
   uint64_t x(int lo, int len) { return (b >> lo) & ((insn_bits_t(1) << len)-1); }
@@ -257,6 +263,56 @@ inline freg_t f128_negate(freg_t a)
   a.v[1] ^= F64_SIGN;
   return a;
 }
+
+/* Vector extension wrappers */
+typedef uint64_t vtype_t;
+static const vtype_t UINT = 0;
+static const vtype_t INT = 1;
+static const vtype_t FP = 3;
+
+#define VL STATE.vl
+#define VL_LOOP for(size_t eidx = 0; eidx < VL; eidx++)
+
+#define WRITE_VREG_ELEM(reg, elem, value) (STATE.VR[elem].write(reg, value))
+#define WRITE_VREG(reg, value) WRITE_VREG_ELEM(reg, eidx, value)
+#define WRITE_VRD(value) WRITE_VREG(insn.rd(), value)
+#define READ_VREG_ELEM(reg, elem) (STATE.VR[elem][reg])
+#define READ_VREG(reg) READ_VREG_ELEM(reg, eidx)
+
+#define VTYPE(reg) (STATE.vtype[reg])
+#define VEW(ty) (ty & 0x3f)
+#define VEREP(ty) ((ty >> 6) & 0x1f)
+#define VESHAPE(ty) ((ty >> 11) & 0x1f)
+#define vIsInt(t) ( VEREP(t) == INT )
+#define vIsUInt(t) ( VEREP(t) == UINT )
+#define vIsFP(t) ( VEREP(t) == FP )
+
+#define TRD VTYPE(insn.rd())
+#define TRS1 VTYPE(insn.rs1())
+#define VS1 DYN_EXTEND(TRD, TRS1, READ_VREG(insn.rs1()))
+
+// Operations
+#define DYN_EXTEND(outT, inT, val) ({ \
+    reg_t outV = val; \
+    if(VEW(inT) < VEW(outT)) \
+      outV = vIsInt(inT) ? sext_xlen(val) : (vIsUInt(inT) ? zext_xlen(val) : (vIsFP(inT) ? val : \
+            throw trap_illegal_instruction(0))); \
+    outV; })
+
+#define DYN_ADD(ta, a, tb, b) ({ reg_t outV; \
+  switch(VEREP(ta)) { \
+  case INT: case UINT: \
+    switch(tb) { \
+    case INT: case UINT: outV = a + b; break;\
+    default: throw trap_illegal_instruction(0); } break; \
+  case FP: \
+    switch(tb) { \
+    case FP: outV = f64_add(f64(a), f64(b)).v; break;\
+    default: throw trap_illegal_instruction(0); } break; \
+  default: throw trap_illegal_instruction(0); } \
+  outV; })
+
+/* End Vector extension */
 
 #define validate_csr(which, write) ({ \
   if (!STATE.serialized) return PC_SERIALIZE_BEFORE; \
