@@ -284,6 +284,8 @@ riscv_insn_list = \
 	subw \
 	sw \
 	vaddi \
+	vadd \
+	vsub \
 	wfi \
 	xor \
 	xori \

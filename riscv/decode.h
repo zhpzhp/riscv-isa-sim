@@ -102,7 +102,7 @@ public:
   uint64_t rvc_rs1s() { return 8 + x(7, 3); }
   uint64_t rvc_rs2s() { return 8 + x(2, 3); }
 
-  int64_t rvv_imm() { return x(20, 8); }
+  int64_t rvv_imm() { return xs(20, 8); }
   int64_t rvv_load_imm() { return x(27, 5); }
   int64_t rvv_store_imm() { return x(7, 5); }
   uint64_t rvv_mask() { return x(12, 2); }
@@ -265,17 +265,34 @@ inline freg_t f128_negate(freg_t a)
 }
 
 /* Vector extension wrappers */
+typedef union velt {
+  reg_t x;
+  freg_t f;
+} velt_t;
+inline velt_t velt(float32_t f) { return { .f={((uint64_t)-1 << 32) | f.v, (uint64_t)-1 }}; }
+inline velt_t velt(float64_t f) { return { .f={f.v, (uint64_t)-1 } }; }
+inline velt_t velt(float128_t f) { return { .f=f }; }
+inline velt_t velt(uint8_t x) { return { .x=x }; }
+inline velt_t velt(uint16_t x) { return { .x=x }; }
+inline velt_t velt(uint32_t x) { return { .x=x }; }
+inline velt_t velt(uint64_t x) { return { .x=x }; }
+inline velt_t velt(int64_t x) { return { .x=(uint64_t)x }; } // immediate
+inline velt_t velt(velt_t v) { return v; }
 typedef uint64_t vtype_t;
 static const vtype_t UINT = 0;
 static const vtype_t INT = 1;
 static const vtype_t FP = 3;
+static const vtype_t W64 = 32;
+static const vtype_t W32 = 24;
+static const vtype_t W16 = 16;
+static const vtype_t W8 = 8;
 
 #define VL STATE.vl
 #define VL_LOOP for(size_t eidx = 0; eidx < VL; eidx++)
 
 #define WRITE_VREG_ELEM(reg, elem, value) (STATE.VR[elem].write(reg, value))
 #define WRITE_VREG(reg, value) WRITE_VREG_ELEM(reg, eidx, value)
-#define WRITE_VRD(value) WRITE_VREG(insn.rd(), value)
+#define WRITE_VRD(value) WRITE_VREG(insn.rd(), DYN_TRUNCATE(TRD, TIN, value))
 #define READ_VREG_ELEM(reg, elem) (STATE.VR[elem][reg])
 #define READ_VREG(reg) READ_VREG_ELEM(reg, eidx)
 
@@ -286,32 +303,58 @@ static const vtype_t FP = 3;
 #define vIsInt(t) ( VEREP(t) == INT )
 #define vIsUInt(t) ( VEREP(t) == UINT )
 #define vIsFP(t) ( VEREP(t) == FP )
+#define vIs64(t) ( VEW(t) == W64 )
+#define vIs32(t) ( VEW(t) == W32 )
+#define vIs16(t) ( VEW(t) == W16 )
+#define vIs8(t) ( VEW(t) == W8 )
+#define RS1_VAL (1)
+#define RS2_VAL (0)
+#define RS3_VAL (0)
 
 #define TRD VTYPE(insn.rd())
 #define TRS1 VTYPE(insn.rs1())
-#define VS1 DYN_EXTEND(TRD, TRS1, READ_VREG(insn.rs1()))
+#define TRS2 VTYPE(insn.rs2())
+#define TRS3 VTYPE(insn.rs3())
+#define TIN INTER_TYPE(RS1_VAL, TRS1, RS2_VAL, TRS2, RS3_VAL, TRS3)
+#define VS1 DYN_EXTEND(TIN, TRS1, READ_VREG(insn.rs1()))
+#define VS2 DYN_EXTEND(TIN, TRS2, READ_VREG(insn.rs2()))
 
-// Operations
+
+// Type permotion and demotion
+#define INTER_TYPE(v1, t1, v2, t2, v3, t3) ({ \
+    t1; })
+
 #define DYN_EXTEND(outT, inT, val) ({ \
-    reg_t outV = val; \
+    velt_t outV = velt(val); \
     if(VEW(inT) < VEW(outT)) \
-      outV = vIsInt(inT) ? sext_xlen(val) : (vIsUInt(inT) ? zext_xlen(val) : (vIsFP(inT) ? val : \
+      outV = vIsInt(inT) ? velt(sext_xlen(outV.x)) : (vIsUInt(inT) ? velt(zext_xlen(outV.x)) : \
+          (vIsFP(inT) ? velt(f128(outV.f)) : \
             throw trap_illegal_instruction(0))); \
     outV; })
 
-#define DYN_ADD(ta, a, tb, b) ({ reg_t outV; \
+#define DYN_TRUNCATE(outT, inT, val) ({ \
+    velt_t outV = velt(val); \
+    if(VEW(inT) > VEW(outT)) \
+      outV.x = vIs64(outT) ? 0xffffffffffffffff & outV.x : (vIs32(outT) ? 0xffffffff & outV.x : (vIs16(outT) ? 0xffff & outV.x : (vIs8(outT) ? 0xff & outV.x : \
+            throw trap_illegal_instruction(0)))); \
+    outV; })
+
+// Operations
+#define DYN_OP(iop, fop, ta, a, tb, b) ({ velt_t outV; \
   switch(VEREP(ta)) { \
   case INT: case UINT: \
-    switch(tb) { \
-    case INT: case UINT: outV = a + b; break;\
+    switch(VEREP(tb)) { \
+    case INT: case UINT: outV = velt(a.x iop b.x); break;\
     default: throw trap_illegal_instruction(0); } break; \
   case FP: \
-    switch(tb) { \
-    case FP: outV = f64_add(f64(a), f64(b)).v; break;\
+    switch(VEREP(tb)) { \
+    case FP: outV = velt(f128_##fop(a.f, b.f)); break;\
     default: throw trap_illegal_instruction(0); } break; \
   default: throw trap_illegal_instruction(0); } \
   outV; })
 
+#define DYN_ADD(ta, a, tb, b) DYN_OP(+, add, ta, a, tb, b)
+#define DYN_SUB(ta, a, tb, b) DYN_OP(-, sub, ta, a, tb, b)
 /* End Vector extension */
 
 #define validate_csr(which, write) ({ \
