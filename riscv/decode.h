@@ -225,19 +225,25 @@ private:
 #define invalid_pc(pc) ((pc) & 1)
 
 /* Convenience wrappers to simplify softfloat code sequences */
+#define isBoxedF16(r) (isBoxedF32(r) && ((uint16_t)((r.v[0] >> 16) + 1) == 0))
+#define unboxF16(r) (isBoxedF16(r) ? (uint16_t)r.v[0] : defaultNaNF16UI)
 #define isBoxedF32(r) (isBoxedF64(r) && ((uint32_t)((r.v[0] >> 32) + 1) == 0))
 #define unboxF32(r) (isBoxedF32(r) ? (uint32_t)r.v[0] : defaultNaNF32UI)
 #define isBoxedF64(r) ((r.v[1] + 1) == 0)
 #define unboxF64(r) (isBoxedF64(r) ? r.v[0] : defaultNaNF64UI)
 typedef float128_t freg_t;
+inline float16_t f16(uint16_t v) { return { v }; }
 inline float32_t f32(uint32_t v) { return { v }; }
 inline float64_t f64(uint64_t v) { return { v }; }
+inline float16_t f16(freg_t r) { return f16(unboxF16(r)); }
 inline float32_t f32(freg_t r) { return f32(unboxF32(r)); }
 inline float64_t f64(freg_t r) { return f64(unboxF64(r)); }
 inline float128_t f128(freg_t r) { return r; }
+inline freg_t freg(float16_t f) { return { ((uint64_t)-1 << 16) | f.v, (uint64_t)-1 }; }
 inline freg_t freg(float32_t f) { return { ((uint64_t)-1 << 32) | f.v, (uint64_t)-1 }; }
 inline freg_t freg(float64_t f) { return { f.v, (uint64_t)-1 }; }
 inline freg_t freg(float128_t f) { return f; }
+#define F16_SIGN ((uint16_t)1 << 15)
 #define F32_SIGN ((uint32_t)1 << 31)
 #define F64_SIGN ((uint64_t)1 << 63)
 #define fsgnj32(a, b, n, x) \
@@ -269,9 +275,10 @@ typedef union velt {
   reg_t x;
   freg_t f;
 } velt_t;
-inline velt_t velt(float32_t f) { return { .f={((uint64_t)-1 << 32) | f.v, (uint64_t)-1 }}; }
-inline velt_t velt(float64_t f) { return { .f={f.v, (uint64_t)-1 } }; }
-inline velt_t velt(float128_t f) { return { .f=f }; }
+inline velt_t velt(float16_t f) { velt_t elt; elt.f = {((uint64_t)-1 << 16) | f.v, (uint64_t)-1 }; return elt; }
+inline velt_t velt(float32_t f) { velt_t elt; elt.f = {((uint64_t)-1 << 32) | f.v, (uint64_t)-1 }; return elt; }
+inline velt_t velt(float64_t f) { velt_t elt; elt.f = {f.v, (uint64_t)-1 }; return elt; }
+inline velt_t velt(float128_t f) { velt_t elt; elt.f = f; return elt; }
 inline velt_t velt(uint8_t x) { return { .x=x }; }
 inline velt_t velt(uint16_t x) { return { .x=x }; }
 inline velt_t velt(uint32_t x) { return { .x=x }; }
@@ -282,6 +289,7 @@ typedef uint64_t vtype_t;
 static const vtype_t UINT = 0;
 static const vtype_t INT = 1;
 static const vtype_t FP = 3;
+static const vtype_t W128 = 48;
 static const vtype_t W64 = 32;
 static const vtype_t W32 = 24;
 static const vtype_t W16 = 16;
@@ -296,7 +304,8 @@ static const vtype_t W8 = 8;
 #define READ_VREG_ELEM(reg, elem) (STATE.VR[elem][reg])
 #define READ_VREG(reg) READ_VREG_ELEM(reg, eidx)
 
-#define VTYPE(reg) (STATE.vtype[reg])
+#define VTYPE(S, W, R) ( (S << 11) | (R << 6) | W)
+#define VTY(reg) (STATE.vtype[reg])
 #define VEW(ty) (ty & 0x3f)
 #define VEREP(ty) ((ty >> 6) & 0x1f)
 #define VESHAPE(ty) ((ty >> 11) & 0x1f)
@@ -311,10 +320,10 @@ static const vtype_t W8 = 8;
 #define RS2_VAL (0)
 #define RS3_VAL (0)
 
-#define TRD VTYPE(insn.rd())
-#define TRS1 VTYPE(insn.rs1())
-#define TRS2 VTYPE(insn.rs2())
-#define TRS3 VTYPE(insn.rs3())
+#define TRD VTY(insn.rd())
+#define TRS1 VTY(insn.rs1())
+#define TRS2 VTY(insn.rs2())
+#define TRS3 VTY(insn.rs3())
 #define TIN INTER_TYPE(RS1_VAL, TRS1, RS2_VAL, TRS2, RS3_VAL, TRS3)
 #define VS1 DYN_EXTEND(TIN, TRS1, READ_VREG(insn.rs1()))
 #define VS2 DYN_EXTEND(TIN, TRS2, READ_VREG(insn.rs2()))
@@ -322,20 +331,28 @@ static const vtype_t W8 = 8;
 
 // Type permotion and demotion
 #define INTER_TYPE(v1, t1, v2, t2, v3, t3) ({ \
-    t1; })
+    vtype_t oT = t1; \
+    if(v1 && vIsFP(t1) && (!v2 || vIsFP(t2)) && (!v3 || vIsFP(t3))) \
+      oT = VTYPE(0, W128, FP);  \
+    oT; })
 
 #define DYN_EXTEND(outT, inT, val) ({ \
     velt_t outV = velt(val); \
     if(VEW(inT) < VEW(outT)) \
       outV = vIsInt(inT) ? velt(sext_xlen(outV.x)) : (vIsUInt(inT) ? velt(zext_xlen(outV.x)) : \
-          (vIsFP(inT) ? velt(f128(outV.f)) : \
+          (vIsFP(inT) ? (vIs64(inT) ? velt(f64_to_f128(f64(outV.f))) : (vIs32(inT) ? velt(f32_to_f128(f32(outV.f))) : (vIs16(inT) ? velt(f16_to_f128(f16(outV.f))) : \
+            throw trap_illegal_instruction(0)))) : \
             throw trap_illegal_instruction(0))); \
     outV; })
 
 #define DYN_TRUNCATE(outT, inT, val) ({ \
     velt_t outV = velt(val); \
     if(VEW(inT) > VEW(outT)) \
-      outV.x = vIs64(outT) ? 0xffffffffffffffff & outV.x : (vIs32(outT) ? 0xffffffff & outV.x : (vIs16(outT) ? 0xffff & outV.x : (vIs8(outT) ? 0xff & outV.x : \
+      if(vIsFP(inT) && vIsFP(outT)) \
+        outV = vIs64(outT) ? velt(f128_to_f64(outV.f)) : (vIs32(outT) ? velt(f128_to_f32(outV.f)) : (vIs16(outT) ? velt(f128_to_f16(outV.f)) : \
+            throw trap_illegal_instruction(0))); \
+      else \
+        outV.x = vIs64(outT) ? 0xffffffffffffffff & outV.x : (vIs32(outT) ? 0xffffffff & outV.x : (vIs16(outT) ? 0xffff & outV.x : (vIs8(outT) ? 0xff & outV.x : \
             throw trap_illegal_instruction(0)))); \
     outV; })
 
