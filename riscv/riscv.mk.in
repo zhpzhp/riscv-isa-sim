@@ -285,6 +285,10 @@ riscv_insn_list = \
 	sw \
 	vaddi \
 	vadd \
+	vextract \
+	vinsert \
+	vld \
+	vst \
 	vsub \
 	wfi \
 	xor \

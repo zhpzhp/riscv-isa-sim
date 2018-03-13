@@ -1,3 +1,3 @@
 VL_LOOP {
-  WRITE_VRD(DYN_ADD(TRS1, VS1, INT, velt(insn.rvv_imm())));
+  WRITE_VRD(1,0,0,DYN_ADDI(TRS1, VS1, velt(insn.rvv_imm())));
 }

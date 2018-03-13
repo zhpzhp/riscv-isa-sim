@@ -300,7 +300,7 @@ static const vtype_t W8 = 8;
 
 #define WRITE_VREG_ELEM(reg, elem, value) (STATE.VR[elem].write(reg, value))
 #define WRITE_VREG(reg, value) WRITE_VREG_ELEM(reg, eidx, value)
-#define WRITE_VRD(value) WRITE_VREG(insn.rd(), DYN_TRUNCATE(TRD, TIN, value))
+#define WRITE_VRD(v1,v2,v3,value) WRITE_VREG(insn.rd(), DYN_TRUNCATE(TRD, TIN(v1,v2,v3), value))
 #define READ_VREG_ELEM(reg, elem) (STATE.VR[elem][reg])
 #define READ_VREG(reg) READ_VREG_ELEM(reg, eidx)
 
@@ -312,21 +312,25 @@ static const vtype_t W8 = 8;
 #define vIsInt(t) ( VEREP(t) == INT )
 #define vIsUInt(t) ( VEREP(t) == UINT )
 #define vIsFP(t) ( VEREP(t) == FP )
+#define vIs128(t) ( VEW(t) == W128 )
 #define vIs64(t) ( VEW(t) == W64 )
 #define vIs32(t) ( VEW(t) == W32 )
 #define vIs16(t) ( VEW(t) == W16 )
 #define vIs8(t) ( VEW(t) == W8 )
-#define RS1_VAL (1)
-#define RS2_VAL (0)
-#define RS3_VAL (0)
 
 #define TRD VTY(insn.rd())
 #define TRS1 VTY(insn.rs1())
 #define TRS2 VTY(insn.rs2())
 #define TRS3 VTY(insn.rs3())
-#define TIN INTER_TYPE(RS1_VAL, TRS1, RS2_VAL, TRS2, RS3_VAL, TRS3)
-#define VS1 DYN_EXTEND(TIN, TRS1, READ_VREG(insn.rs1()))
-#define VS2 DYN_EXTEND(TIN, TRS2, READ_VREG(insn.rs2()))
+#define TIN(v1,v2,v3) INTER_TYPE(v1, TRS1, v2, TRS2, v3, TRS3)
+#define TIN_12 TIN(1, 1, 0)
+#define TIN_3 TIN(0, 0, 1)
+#define VS1 (READ_VREG(insn.rs1())) // TODO: why can't we remove these
+#define VS2 (READ_VREG(insn.rs2()))
+#define VS3 (READ_VREG(insn.rs3()))
+#define VS1_12 DYN_EXTEND(TIN_12, TRS1, READ_VREG(insn.rs1()))
+#define VS2_12 DYN_EXTEND(TIN_12, TRS2, READ_VREG(insn.rs2()))
+#define VS3_3 DYN_EXTEND(TIN_3, TRS3, READ_VREG(insn.rs3()))
 
 
 // Type permotion and demotion
@@ -370,8 +374,54 @@ static const vtype_t W8 = 8;
   default: throw trap_illegal_instruction(0); } \
   outV; })
 
-#define DYN_ADD(ta, a, tb, b) DYN_OP(+, add, ta, a, tb, b)
+#define DYN_LOAD(a) ({ velt_t outV; \
+    switch(VEREP(TRD)) { \
+    case FP: case UINT: \
+      outV = vIs64(TRD) ? velt(MMU.load_uint64(a+eidx*8)) : vIs32(TRD) ? velt(MMU.load_uint32(a+eidx*4)) : vIs16(TRD) ? velt(MMU.load_uint16(a+eidx*2)) : vIs8(TRD) ? velt(MMU.load_uint8(a+eidx)) : velt((float128_t){MMU.load_uint64(a+eidx*16), MMU.load_uint64(a+eidx*16+8)});\
+      break; \
+    case INT: \
+      outV = vIs64(TRD) ? velt(MMU.load_uint64(a+eidx*8)) : vIs32(TRD) ? velt(MMU.load_uint32(a+eidx*4)) : vIs16(TRD) ? velt(MMU.load_uint16(a+eidx*2)) : vIs8(TRD) ? velt(MMU.load_uint8(a+eidx)) : velt((float128_t){MMU.load_uint64(a+eidx*16), MMU.load_uint64(a+eidx*16+8)});\
+      break; \
+    default: throw trap_illegal_instruction(0); } \
+    outV; })
+
+#define DYN_STORE(a, tb, b) ({ \
+    switch(VEREP(tb)) { \
+    case UINT: case INT: \
+      if(vIs64(tb)) \
+        (MMU.store_uint64(a+eidx*8, b.x)); \
+      else if (vIs32(tb)) \
+        (MMU.store_uint32(a+eidx*4, b.x)); \
+      else if (vIs16(tb)) \
+        (MMU.store_uint16(a+eidx*2, b.x)); \
+      else if(vIs8(tb)) \
+        (MMU.store_uint8(a+eidx, b.x)); \
+      else \
+        throw trap_illegal_instruction(0);\
+      break; \
+    case FP: \
+      if(vIs64(tb) ) \
+        (MMU.store_uint64(a+eidx*8, b.f.v[0])); \
+      else if(vIs32(tb) ) \
+        (MMU.store_uint32(a+eidx*4, b.f.v[0])); \
+      else if(vIs16(tb) ) \
+        (MMU.store_uint16(a+eidx*2, b.f.v[0])); \
+      else if(vIs128(tb) ) { \
+        MMU.store_uint64(a+eidx*16, b.f.v[0]); \
+        MMU.store_uint64(a+eidx*16+8, b.f.v[1]); \
+      } else \
+        throw trap_illegal_instruction(0); \
+      break; \
+    default: \
+      throw trap_illegal_instruction(0); \
+      } \
+    })
+
+#define DYN_ADD(ta, a, tb, b) DYN_OP(+, add, ta, a ## _12, tb, b ## _12)
+#define DYN_ADDI(ta, a, b) DYN_OP(+, add, ta, a ## _12, ta, b)
 #define DYN_SUB(ta, a, tb, b) DYN_OP(-, sub, ta, a, tb, b)
+#define DYN_SL(ta, a, tb, b) DYN_OP(<<, err, ta, a ## _12, tb, b ## _12)
+#define DYN_SLI(ta, a, b) DYN_OP(<<, err, ta, a ## _12, ta, b)
 /* End Vector extension */
 
 #define validate_csr(which, write) ({ \
