@@ -298,6 +298,8 @@ static const vtype_t W8 = 8;
 #define VL STATE.vl
 #define VL_LOOP for(size_t eidx = 0; eidx < VL; eidx++)
 
+#define require_vec require_accelerator
+#define dirty_vec_state dirty_ext_state
 #define WRITE_VREG_ELEM(reg, elem, value) (STATE.VR[elem].write(reg, value))
 #define WRITE_VREG(reg, value) WRITE_VREG_ELEM(reg, eidx, value)
 #define WRITE_VRD(v1,v2,v3,value) WRITE_VREG(insn.rd(), DYN_TRUNCATE(TRD, TIN(v1,v2,v3), value))

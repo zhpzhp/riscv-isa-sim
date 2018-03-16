@@ -88,12 +88,12 @@ struct state_t
   void reset();
 
   static const int num_triggers = 4;
-  static const reg_t MAX_VLEN = 8;
+  static const reg_t max_vlen = 8;
 
   reg_t pc;
   regfile_t<reg_t, NXPR, true> XPR;
   regfile_t<freg_t, NFPR, false> FPR;
-  regfile_t<velt_t, NVR, false> VR[MAX_VLEN];
+  regfile_t<velt_t, NVR, false> VR[max_vlen];
 
   // control and status registers
   reg_t prv;    // TODO: Can this be an enum instead?
