@@ -294,17 +294,29 @@ static const vtype_t W64 = 32;
 static const vtype_t W32 = 24;
 static const vtype_t W16 = 16;
 static const vtype_t W8 = 8;
+static const vtype_t SCALAR = 0;
+static const vtype_t VECTOR = 4;
 
-#define VL STATE.vl
+#define VL ( vIsScalar(TRD) ? 1 : STATE.vl )
 #define VL_LOOP for(size_t eidx = 0; eidx < VL; eidx++)
 
 #define require_vec require_accelerator
 #define dirty_vec_state dirty_ext_state
-#define WRITE_VREG_ELEM(reg, elem, value) (STATE.VR[elem].write(reg, value))
-#define WRITE_VREG(reg, value) WRITE_VREG_ELEM(reg, eidx, value)
+#ifndef RISCV_ENABLE_COMMITLOG
+#define WRITE_VREG_ELEM(reg, elem, value) ({ STATE.VR[elem].write(reg, value); })
+#else
+#define WRITE_VREG_ELEM(reg, elem, value) ({ \
+    if(vIsFP(VTY(reg))) \
+      printf("Writing V%d[%d]=%llx:%llx\n",reg,elem,value.f.v[1],value.f.v[0]); \
+    else \
+      printf("Writing V%d[%d]=%llx\n",reg,elem,value.x); \
+    STATE.VR[elem].write(reg, value);})
+#endif
+#define WRITE_VREG(reg, value) ({ \
+    vIsScalar(VTY(reg)) ? WRITE_VREG_ELEM(reg, 0, value) : WRITE_VREG_ELEM(reg, eidx, value); })
 #define WRITE_VRD(v1,v2,v3,value) WRITE_VREG(insn.rd(), DYN_TRUNCATE(TRD, TIN(v1,v2,v3), value))
-#define READ_VREG_ELEM(reg, elem) (STATE.VR[elem][reg])
-#define READ_VREG(reg) READ_VREG_ELEM(reg, eidx)
+#define READ_VREG_ELEM(reg, elem) ( STATE.VR[elem][reg] )
+#define READ_VREG(reg) ( vIsScalar(VTY(reg)) ? READ_VREG_ELEM(reg, 0) : READ_VREG_ELEM(reg, eidx) )
 
 #define VTYPE(S, W, R) ( (S << 11) | (R << 6) | W)
 #define VTY(reg) (STATE.vtype[reg])
@@ -319,6 +331,8 @@ static const vtype_t W8 = 8;
 #define vIs32(t) ( VEW(t) == W32 )
 #define vIs16(t) ( VEW(t) == W16 )
 #define vIs8(t) ( VEW(t) == W8 )
+#define vIsScalar(t) ( VESHAPE(t) == SCALAR )
+#define vIsVector(t) ( VESHAPE(t) == VECTOR )
 
 #define TRD VTY(insn.rd())
 #define TRS1 VTY(insn.rs1())
