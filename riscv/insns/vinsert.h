@@ -1,1 +1,1 @@
-WRITE_VREG_ELEM(insn.rd(), RS1, velt(RS2));
+WRITE_VREG_ELEM(insn.rd(), RS2, velt(RS1));
