@@ -802,6 +802,9 @@ insn_func_t processor_t::decode_insn(insn_t insn)
     while ((insn.bits() & p->mask) != p->match)
       p++;
     desc = *p;
+    //Check if we should use the next insn due to vmask
+    if((insn.bits() & (p+1)->mask) == (p+1)->match)
+      desc = (~(insn.rvv_mask())) & ((p->mask >> 12) & 0x3) ? *p : *(p+1);
 
     if (p->mask != 0 && p > &instructions[0]) {
       if (p->match != (p-1)->match && p->match != (p+1)->match) {

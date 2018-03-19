@@ -340,6 +340,7 @@ static const vtype_t VECTOR = 4;
 #define TRS3 VTY(insn.rs3())
 #define TIN(v1,v2,v3) INTER_TYPE(v1, TRS1, v2, TRS2, v3, TRS3)
 #define TIN_12 TIN(1, 1, 0)
+#define TIN_123 TIN(1, 1, 1)
 #define TIN_3 TIN(0, 0, 1)
 #define VS1 (READ_VREG(insn.rs1())) // TODO: why can't we remove these
 #define VS2 (READ_VREG(insn.rs2()))
@@ -347,6 +348,9 @@ static const vtype_t VECTOR = 4;
 #define VS1_12 DYN_EXTEND(TIN_12, TRS1, READ_VREG(insn.rs1()))
 #define VS2_12 DYN_EXTEND(TIN_12, TRS2, READ_VREG(insn.rs2()))
 #define VS3_3 DYN_EXTEND(TIN_3, TRS3, READ_VREG(insn.rs3()))
+#define VS1_123 DYN_EXTEND(TIN_123, TRS1, READ_VREG(insn.rs1()))
+#define VS2_123 DYN_EXTEND(TIN_123, TRS2, READ_VREG(insn.rs2()))
+#define VS3_123 DYN_EXTEND(TIN_123, TRS3, READ_VREG(insn.rs3()))
 
 
 // Type permotion and demotion
@@ -377,7 +381,7 @@ static const vtype_t VECTOR = 4;
     outV; })
 
 // Operations
-#define DYN_OP(iop, fop, ta, a, tb, b) ({ velt_t outV; \
+#define DYN_OP2(iop, fop, ta, a, tb, b) ({ velt_t outV; \
   switch(VEREP(ta)) { \
   case INT: case UINT: \
     switch(VEREP(tb)) { \
@@ -386,6 +390,25 @@ static const vtype_t VECTOR = 4;
   case FP: \
     switch(VEREP(tb)) { \
     case FP: outV = velt(f128_##fop(a.f, b.f)); break;\
+    default: throw trap_illegal_instruction(0); } break; \
+  default: throw trap_illegal_instruction(0); } \
+  outV; })
+
+#define DYN_OP3(op, ta, a, tb, b, tc, c) ({ velt_t outV; \
+  switch(VEREP(ta)) { \
+  case INT: case UINT: \
+    switch(VEREP(tb)) { \
+    case INT: case UINT: \
+      switch(VEREP(tc)) { \
+      case INT: case UINT: outV = velt(op(a.x, b.x, c.x)); break;\
+      default: throw trap_illegal_instruction(0); } break; \
+    default: throw trap_illegal_instruction(0); } break; \
+  case FP: \
+    switch(VEREP(tb)) { \
+    case FP: \
+      switch(VEREP(tc)) { \
+      case FP: outV = velt(f128_##op(a.f, b.f, c.f)); break;\
+      default: throw trap_illegal_instruction(0); } break; \
     default: throw trap_illegal_instruction(0); } break; \
   default: throw trap_illegal_instruction(0); } \
   outV; })
@@ -433,11 +456,14 @@ static const vtype_t VECTOR = 4;
       } \
     })
 
-#define DYN_ADD(ta, a, tb, b) DYN_OP(+, add, ta, a ## _12, tb, b ## _12)
-#define DYN_ADDI(ta, a, b) DYN_OP(+, add, ta, a ## _12, ta, b)
-#define DYN_SUB(ta, a, tb, b) DYN_OP(-, sub, ta, a, tb, b)
-#define DYN_SL(ta, a, tb, b) DYN_OP(<<, err, ta, a ## _12, tb, b ## _12)
-#define DYN_SLI(ta, a, b) DYN_OP(<<, err, ta, a ## _12, ta, b)
+// Redirect for INT and UINT
+#define mulAdd(a, b, c) ( a * b + c )
+#define DYN_ADD(ta, a, tb, b) DYN_OP2(+, add, ta, a ## _12, tb, b ## _12)
+#define DYN_ADDI(ta, a, b) DYN_OP2(+, add, ta, a ## _12, ta, b)
+#define DYN_SUB(ta, a, tb, b) DYN_OP2(-, sub, ta, a, tb, b)
+#define DYN_SL(ta, a, tb, b) DYN_OP2(<<, err, ta, a ## _12, tb, b ## _12)
+#define DYN_SLI(ta, a, b) DYN_OP2(<<, err, ta, a ## _12, ta, b)
+#define DYN_MADD(ta, a, tb, b, tc, c) DYN_OP3(mulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
 /* End Vector extension */
 
 #define validate_csr(which, write) ({ \
