@@ -321,7 +321,7 @@ static const vtype_t VECTOR = 4;
 #define READ_VREG_ELEM(reg, elem) ( STATE.VR[elem][reg] )
 #define READ_VREG(reg) ( vIsScalar(VTY(reg)) ? READ_VREG_ELEM(reg, 0) : READ_VREG_ELEM(reg, eidx) )
 
-#define VTYPE(S, W, R) ( (S << 11) | (R << 6) | W)
+#define VTYPE(S, R, W) ( (S << 11) | (R << 6) | W)
 #define VTY(reg) (STATE.vtype[reg])
 #define VEW(ty) (ty & 0x3f)
 #define VEREP(ty) ((ty >> 6) & 0x1f)
@@ -360,7 +360,7 @@ static const vtype_t VECTOR = 4;
 #define INTER_TYPE(v1, t1, v2, t2, v3, t3) ({ \
     vtype_t oT = t1; \
     if(v1 && vIsFP(t1) && (!v2 || vIsFP(t2)) && (!v3 || vIsFP(t3))) \
-      oT = VTYPE(0, W128, FP);  \
+      oT = VTYPE(0, FP, W128);  \
     oT; })
 
 #define DYN_EXTEND(outT, inT, val) ({ \
@@ -370,6 +370,12 @@ static const vtype_t VECTOR = 4;
           (vIsFP(inT) ? (vIs64(inT) ? velt(f64_to_f128(f64(outV.f))) : (vIs32(inT) ? velt(f32_to_f128(f32(outV.f))) : (vIs16(inT) ? velt(f16_to_f128(f16(outV.f))) : \
             throw trap_illegal_instruction(0)))) : \
             throw trap_illegal_instruction(0))); \
+    outV; })
+
+// Forced conversion
+#define DYN_CONVERT(outT, val) ({ \
+    velt_t outV = vIsFP(outT) ? (vIs64(outT) ? velt(f64(val)) : (vIs32(outT) ? velt(f32(val)) : (vIs16(outT) ? velt(f16(val)) : throw trap_illegal_instruction(0)))) : \
+                 vIsInt(outT) ? velt(sext_xlen(val)) : (vIsUInt(outT) ? velt(zext_xlen(val)) : throw trap_illegal_instruction(0)); \
     outV; })
 
 #define DYN_TRUNCATE(outT, inT, val) ({ \

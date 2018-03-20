@@ -1,1 +1,1 @@
-WRITE_VREG_ELEM(insn.rd(), RS2, velt(RS1));
+WRITE_VREG_ELEM(insn.rd(), RS2, DYN_CONVERT(TRD, RS1));
