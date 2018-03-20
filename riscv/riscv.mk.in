@@ -292,6 +292,7 @@ riscv_insn_list = \
 	vmadd \
 	vmul \
 	vrem \
+	vsl \
 	vst \
 	vsub \
 	wfi \

@@ -389,12 +389,14 @@ static const vtype_t VECTOR = 4;
             throw trap_illegal_instruction(0)))); \
     outV; })
 
+// Catch invalid fp functions
+#define f128_err(f1, f2) ({ throw trap_illegal_instruction(0); velt((uint64_t) 0); })
 // Operations
 #define DYN_OP2(iop, fop, ta, a, tb, b) ({ velt_t outV; \
   switch(VEREP(ta)) { \
   case INT: case UINT: \
     switch(VEREP(tb)) { \
-    case INT: case UINT: outV = velt(a.x iop b.x); break;\
+    case INT: case UINT: outV = velt((a.x) iop (b.x)); break;\
     default: throw trap_illegal_instruction(0); } break; \
   case FP: \
     switch(VEREP(tb)) { \
