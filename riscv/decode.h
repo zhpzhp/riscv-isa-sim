@@ -297,8 +297,11 @@ static const vtype_t W8 = 8;
 static const vtype_t SCALAR = 0;
 static const vtype_t VECTOR = 4;
 
-#define VL ( vIsScalar(TRD) ? 1 : STATE.vl )
-#define VL_LOOP for(size_t eidx = 0; eidx < VL; eidx++)
+#define VL_T(t) ( vIsScalar(t) ? 1 : STATE.vl )
+#define VL VL_T(TRD)
+#define VL_LOOP_T(t) for(size_t eidx = 0; eidx < VL_T(t); eidx++)
+#define VL_LOOP VL_LOOP_T(TRD)
+
 
 #define require_vec require_accelerator
 #define dirty_vec_state dirty_ext_state
