@@ -418,7 +418,10 @@ static const vtype_t VECTOR = 4;
 
 #define DYN_LOAD(a) ({ velt_t outV; \
     switch(VEREP(TRD)) { \
-    case FP: case UINT: \
+    case FP: \
+      outV = vIs64(TRD) ? velt(f64(MMU.load_uint64(a+eidx*8))) : vIs32(TRD) ? velt(f32(MMU.load_uint32(a+eidx*4))) : vIs16(TRD) ? velt(f16(MMU.load_uint16(a+eidx*2))) : velt((float128_t){MMU.load_uint64(a+eidx*16), MMU.load_uint64(a+eidx*16+8)});\
+      break; \
+    case UINT: \
       outV = vIs64(TRD) ? velt(MMU.load_uint64(a+eidx*8)) : vIs32(TRD) ? velt(MMU.load_uint32(a+eidx*4)) : vIs16(TRD) ? velt(MMU.load_uint16(a+eidx*2)) : vIs8(TRD) ? velt(MMU.load_uint8(a+eidx)) : velt((float128_t){MMU.load_uint64(a+eidx*16), MMU.load_uint64(a+eidx*16+8)});\
       break; \
     case INT: \
