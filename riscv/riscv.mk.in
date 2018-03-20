@@ -283,12 +283,15 @@ riscv_insn_list = \
 	sub \
 	subw \
 	sw \
-	vaddi \
 	vadd \
+	vaddi \
+	vdiv \
 	vextract \
 	vinsert \
-	vmadd \
 	vld \
+	vmadd \
+	vmul \
+	vrem \
 	vst \
 	vsub \
 	wfi \
