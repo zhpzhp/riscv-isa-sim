@@ -475,12 +475,17 @@ static const vtype_t VECTOR = 4;
 
 // Redirect for INT and UINT
 #define mulAdd(a, b, c) ( a * b + c )
+#define f128_ne(a, b) (!f128_eq(a, b))
+#define f128_ge(a, b) (f128_le(b, a))
 #define DYN_ADD(ta, a, tb, b) DYN_OP2(+, add, ta, a ## _12, tb, b ## _12)
 #define DYN_ADDI(ta, a, b) DYN_OP2(+, add, ta, a ## _12, ta, b)
 #define DYN_DIV(ta, a, tb, b) DYN_OP2(/, div, ta, a ## _12, tb, b ## _12)
 #define DYN_MUL(ta, a, tb, b) DYN_OP2(*, mul, ta, a ## _12, tb, b ## _12)
 #define DYN_REM(ta, a, tb, b) DYN_OP2(%, rem, ta, a ## _12, tb, b ## _12)
 #define DYN_SEQ(ta, a, tb, b) DYN_OP2(==, eq, ta, a ## _12, tb, b ## _12)
+#define DYN_SNE(ta, a, tb, b) DYN_OP2(!=, ne, ta, a ## _12, tb, b ## _12)
+#define DYN_SLT(ta, a, tb, b) DYN_OP2(<, lt, ta, a ## _12, tb, b ## _12)
+#define DYN_SGE(ta, a, tb, b) DYN_OP2(>=, ge, ta, a ## _12, tb, b ## _12)
 #define DYN_SUB(ta, a, tb, b) DYN_OP2(-, sub, ta, a ## _12, tb, b ## _12)
 #define DYN_SL(ta, a, tb, b) DYN_OP2(<<, err, ta, a ## _12, tb, b ## _12)
 #define DYN_SLI(ta, a, b) DYN_OP2(<<, err, ta, a ## _12, ta, b)

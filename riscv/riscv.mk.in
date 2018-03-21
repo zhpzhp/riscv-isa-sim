@@ -293,6 +293,9 @@ riscv_insn_list = \
 	vmul \
 	vrem \
 	vseq \
+	vsne \
+	vslt \
+	vsge \
 	vsl \
 	vst \
 	vsub \
