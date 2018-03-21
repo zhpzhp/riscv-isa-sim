@@ -279,6 +279,7 @@ inline velt_t velt(float16_t f) { velt_t elt; elt.f = {((uint64_t)-1 << 16) | f.
 inline velt_t velt(float32_t f) { velt_t elt; elt.f = {((uint64_t)-1 << 32) | f.v, (uint64_t)-1 }; return elt; }
 inline velt_t velt(float64_t f) { velt_t elt; elt.f = {f.v, (uint64_t)-1 }; return elt; }
 inline velt_t velt(float128_t f) { velt_t elt; elt.f = f; return elt; }
+inline velt_t velt(bool x) { return { .x=x }; }
 inline velt_t velt(uint8_t x) { return { .x=x }; }
 inline velt_t velt(uint16_t x) { return { .x=x }; }
 inline velt_t velt(uint32_t x) { return { .x=x }; }
@@ -299,7 +300,9 @@ static const vtype_t VECTOR = 4;
 
 #define VL_T(t) ( vIsScalar(t) ? 1 : STATE.vl )
 #define VL VL_T(TRD)
-#define VL_LOOP_T(t) for(size_t eidx = 0; eidx < VL_T(t); eidx++)
+#define VL_LOOP_T(t) for(size_t eidx = 0; eidx < VL_T(t); eidx++) {\
+  if(insn.rvv_mask() == 0x1 && !(READ_VREG(1).x & 0x1)) continue; \
+  if(insn.rvv_mask() == 0x2 && (READ_VREG(1).x & 0x1)) continue;
 #define VL_LOOP VL_LOOP_T(TRD)
 
 
@@ -477,6 +480,7 @@ static const vtype_t VECTOR = 4;
 #define DYN_DIV(ta, a, tb, b) DYN_OP2(/, div, ta, a ## _12, tb, b ## _12)
 #define DYN_MUL(ta, a, tb, b) DYN_OP2(*, mul, ta, a ## _12, tb, b ## _12)
 #define DYN_REM(ta, a, tb, b) DYN_OP2(%, rem, ta, a ## _12, tb, b ## _12)
+#define DYN_SEQ(ta, a, tb, b) DYN_OP2(==, eq, ta, a ## _12, tb, b ## _12)
 #define DYN_SUB(ta, a, tb, b) DYN_OP2(-, sub, ta, a ## _12, tb, b ## _12)
 #define DYN_SL(ta, a, tb, b) DYN_OP2(<<, err, ta, a ## _12, tb, b ## _12)
 #define DYN_SLI(ta, a, b) DYN_OP2(<<, err, ta, a ## _12, ta, b)
