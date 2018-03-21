@@ -313,9 +313,9 @@ static const vtype_t VECTOR = 4;
 #else
 #define WRITE_VREG_ELEM(reg, elem, value) ({ \
     if(vIsFP(VTY(reg))) \
-      printf("Writing V%d[%d]=%llx:%llx\n",reg,elem,value.f.v[1],value.f.v[0]); \
+      fprintf(stderr, "Writing V%d[%d]=%llx:%llx\n",reg,elem,value.f.v[1],value.f.v[0]); \
     else \
-      printf("Writing V%d[%d]=%llx\n",reg,elem,value.x); \
+      fprintf(stderr, "Writing V%d[%d]=%llx\n",reg,elem,value.x); \
     STATE.VR[elem].write(reg, value);})
 #endif
 #define WRITE_VREG(reg, value) ({ \
