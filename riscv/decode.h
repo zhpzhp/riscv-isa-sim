@@ -284,7 +284,10 @@ inline velt_t velt(uint8_t x) { return { .x=x }; }
 inline velt_t velt(uint16_t x) { return { .x=x }; }
 inline velt_t velt(uint32_t x) { return { .x=x }; }
 inline velt_t velt(uint64_t x) { return { .x=x }; }
-inline velt_t velt(int64_t x) { return { .x=(uint64_t)x }; } // immediate
+inline velt_t velt(int8_t x) { return { .x=(uint8_t)x }; }
+inline velt_t velt(int16_t x) { return { .x=(uint16_t)x }; }
+inline velt_t velt(int32_t x) { return { .x=(uint32_t)x }; }
+inline velt_t velt(int64_t x) { return { .x=(uint64_t)x }; }
 inline velt_t velt(velt_t v) { return v; }
 typedef uint64_t vtype_t;
 static const vtype_t UINT = 0;
@@ -428,49 +431,65 @@ static const vtype_t VECTOR = 4;
   outV; })
 
 #define DYN_LOAD(a) ({ velt_t outV; \
-    switch(VEREP(TRD)) { \
-    case FP: \
-      outV = vIs64(TRD) ? velt(f64(MMU.load_uint64(a+eidx*8))) : vIs32(TRD) ? velt(f32(MMU.load_uint32(a+eidx*4))) : vIs16(TRD) ? velt(f16(MMU.load_uint16(a+eidx*2))) : velt((float128_t){MMU.load_uint64(a+eidx*16), MMU.load_uint64(a+eidx*16+8)});\
-      break; \
-    case UINT: \
-      outV = vIs64(TRD) ? velt(MMU.load_uint64(a+eidx*8)) : vIs32(TRD) ? velt(MMU.load_uint32(a+eidx*4)) : vIs16(TRD) ? velt(MMU.load_uint16(a+eidx*2)) : vIs8(TRD) ? velt(MMU.load_uint8(a+eidx)) : velt((float128_t){MMU.load_uint64(a+eidx*16), MMU.load_uint64(a+eidx*16+8)});\
-      break; \
-    case INT: \
-      outV = vIs64(TRD) ? velt(MMU.load_uint64(a+eidx*8)) : vIs32(TRD) ? velt(MMU.load_uint32(a+eidx*4)) : vIs16(TRD) ? velt(MMU.load_uint16(a+eidx*2)) : vIs8(TRD) ? velt(MMU.load_uint8(a+eidx)) : velt((float128_t){MMU.load_uint64(a+eidx*16), MMU.load_uint64(a+eidx*16+8)});\
-      break; \
-    default: throw trap_illegal_instruction(0); } \
-    outV; })
-
+    if(vIs128(TRD)) \
+      outV = DYN_LOAD_ST(a, 16); \
+    else if(vIs64(TRD)) \
+      outV = DYN_LOAD_ST(a, 8); \
+    else if (vIs32(TRD)) \
+      outV = DYN_LOAD_ST(a, 4); \
+    else if (vIs16(TRD)) \
+      outV = DYN_LOAD_ST(a, 2); \
+    else if(vIs8(TRD)) \
+      outV = DYN_LOAD_ST(a, 1); \
+    else \
+      throw trap_illegal_instruction(0);\
+    outV; \
+    })
+#define DYN_LOAD_ST(a, st) ({ velt_t outV; \
+    outV = DYN_LOAD_ST_TY(TRD, a+eidx*st); \
+    outV; \
+    })
+#define DYN_LOAD_ST_TY(ta, a) ( \
+  vIsFP(ta) ? (vIs64(ta) ? velt(f64(MMU.load_uint64(a))) : vIs32(ta) ? velt(f32(MMU.load_uint32(a))) : vIs16(ta) ? velt(f16(MMU.load_uint16(a))) : vIs128(ta) ? velt((float128_t){MMU.load_uint64(a), MMU.load_uint64(a+8)}) : throw trap_illegal_instruction(0)) : \
+    (vIsUInt(ta) ? (vIs64(ta) ? velt(MMU.load_uint64(a)) : vIs32(ta) ? velt(MMU.load_uint32(a)) : vIs16(ta) ? velt(MMU.load_uint16(a)) : vIs8(ta) ? velt(MMU.load_uint8(a)) : throw trap_illegal_instruction(0)) : \
+    (vIsInt(ta) ? (vIs64(ta) ? velt(MMU.load_int64(a)) : vIs32(ta) ? velt(MMU.load_int32(a)) : vIs16(ta) ? velt(MMU.load_int16(a)) : vIs8(ta) ? velt(MMU.load_int8(a)) : throw trap_illegal_instruction(0)) : \
+     throw trap_illegal_instruction(0))) )
+//Only useable for 64bit or smaller
+#define DYN_VALUE(ta, a) ( \
+    vIsInt(ta) || vIsUInt(ta) ? a.x : (vIsFP(ta) ? a.f.v[0] : throw trap_illegal_instruction(0)) \
+    )
 #define DYN_STORE(a, tb, b) ({ \
-    switch(VEREP(tb)) { \
-    case UINT: case INT: \
-      if(vIs64(tb)) \
-        (MMU.store_uint64(a+eidx*8, b.x)); \
-      else if (vIs32(tb)) \
-        (MMU.store_uint32(a+eidx*4, b.x)); \
-      else if (vIs16(tb)) \
-        (MMU.store_uint16(a+eidx*2, b.x)); \
-      else if(vIs8(tb)) \
-        (MMU.store_uint8(a+eidx, b.x)); \
-      else \
-        throw trap_illegal_instruction(0);\
-      break; \
-    case FP: \
-      if(vIs64(tb) ) \
-        (MMU.store_uint64(a+eidx*8, b.f.v[0])); \
-      else if(vIs32(tb) ) \
-        (MMU.store_uint32(a+eidx*4, b.f.v[0])); \
-      else if(vIs16(tb) ) \
-        (MMU.store_uint16(a+eidx*2, b.f.v[0])); \
-      else if(vIs128(tb) ) { \
-        MMU.store_uint64(a+eidx*16, b.f.v[0]); \
-        MMU.store_uint64(a+eidx*16+8, b.f.v[1]); \
-      } else \
-        throw trap_illegal_instruction(0); \
-      break; \
-    default: \
-      throw trap_illegal_instruction(0); \
-      } \
+    if(vIs128(tb)) \
+      DYN_STORE_ST(a, 16, tb, b); \
+    else if(vIs64(tb)) \
+      DYN_STORE_ST(a, 8, tb, b); \
+    else if (vIs32(tb)) \
+      DYN_STORE_ST(a, 4, tb, b); \
+    else if (vIs16(tb)) \
+      DYN_STORE_ST(a, 2, tb, b); \
+    else if(vIs8(tb)) \
+      DYN_STORE_ST(a, 1, tb, b); \
+    else \
+      throw trap_illegal_instruction(0);\
+    })
+#define DYN_STORE_ST(a, st, tb, b) ({ \
+    if(vIs128(tb)) { \
+      if(!vIsFP(tb)) throw trap_illegal_instruction(0); \
+      DYN_STORE_ST_TY(a, st, float128, b.f); \
+    } else if(vIs64(tb)) \
+      DYN_STORE_ST_TY(a, st, uint64, DYN_VALUE(tb, b)); \
+    else if (vIs32(tb)) \
+      DYN_STORE_ST_TY(a, st, uint32, DYN_VALUE(tb, b)); \
+    else if (vIs16(tb)) \
+      DYN_STORE_ST_TY(a, st, uint16, DYN_VALUE(tb, b)); \
+    else if(vIs8(tb)) { \
+      if(!(vIsInt(tb) || vIsUInt(tb))) throw trap_illegal_instruction(0); \
+      DYN_STORE_ST_TY(a, st, uint8, DYN_VALUE(tb, b)); \
+    } else \
+      throw trap_illegal_instruction(0);\
+    })
+#define DYN_STORE_ST_TY(a, st, func, b) ({ \
+    (MMU.store_ ## func(a+eidx*st, b)); \
     })
 
 // Redirect for INT and UINT
