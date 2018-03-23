@@ -296,6 +296,7 @@ riscv_insn_list = \
 	vrem \
 	vseq \
 	vsne \
+	vslide \
 	vslt \
 	vsge \
 	vsl \

@@ -348,6 +348,7 @@ static const vtype_t VECTOR = 4;
 #define TRS2 VTY(insn.rs2())
 #define TRS3 VTY(insn.rs3())
 #define TIN(v1,v2,v3) INTER_TYPE(v1, TRS1, v2, TRS2, v3, TRS3)
+#define TIN_1 TIN(1, 0, 0)
 #define TIN_12 TIN(1, 1, 0)
 #define TIN_123 TIN(1, 1, 1)
 #define TIN_3 TIN(0, 0, 1)
