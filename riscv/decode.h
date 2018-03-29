@@ -495,6 +495,12 @@ static const vtype_t VECTOR = 4;
 
 // Redirect for INT and UINT
 #define mulAdd(a, b, c) ( a * b + c )
+#define mulSub(a, b, c) ( a * b + (-c) )
+#define negMulAdd(a, b, c) ( (-a) * b + (-c) )
+#define negMulSub(a, b, c) ( (-a) * b + c )
+#define f128_mulSub(a, b, c) ( f128_mulAdd(a, b, f128_negate(c)) )
+#define f128_negMulAdd(a, b, c) ( f128_mulAdd(f128_negate(a), b, f128_negate(c)) )
+#define f128_negMulSub(a, b, c) ( f128_mulAdd(f128_negate(a), b, c) )
 #define f128_ne(a, b) (!f128_eq(a, b))
 #define f128_ge(a, b) (f128_le(b, a))
 #define DYN_ADD(ta, a, tb, b) DYN_OP2(+, add, ta, a ## _12, tb, b ## _12)
@@ -510,6 +516,9 @@ static const vtype_t VECTOR = 4;
 #define DYN_SL(ta, a, tb, b) DYN_OP2(<<, err, ta, a ## _12, tb, b ## _12)
 #define DYN_SLI(ta, a, b) DYN_OP2(<<, err, ta, a ## _12, ta, b)
 #define DYN_MADD(ta, a, tb, b, tc, c) DYN_OP3(mulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
+#define DYN_MSUB(ta, a, tb, b, tc, c) DYN_OP3(mulSub, ta, a ## _123, tb, b ## _123, tc, c ## _123)
+#define DYN_NMADD(ta, a, tb, b, tc, c) DYN_OP3(negMulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
+#define DYN_NMSUB(ta, a, tb, b, tc, c) DYN_OP3(negMulSub, ta, a ## _123, tb, b ## _123, tc, c ## _123)
 /* End Vector extension */
 
 #define validate_csr(which, write) ({ \
