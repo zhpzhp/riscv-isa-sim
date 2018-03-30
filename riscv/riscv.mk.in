@@ -295,6 +295,7 @@ riscv_insn_list = \
 	vmax \
 	vmul \
 	vmfirst \
+	vmpop \
 	vrem \
 	vseq \
 	vsne \
