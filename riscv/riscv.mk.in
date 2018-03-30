@@ -292,6 +292,7 @@ riscv_insn_list = \
 	vlds \
 	vldx \
 	vmadd \
+	vmax \
 	vmul \
 	vrem \
 	vseq \

@@ -399,15 +399,15 @@ static const vtype_t VECTOR = 4;
 // Catch invalid fp functions
 #define f128_err(f1, f2) ({ throw trap_illegal_instruction(0); velt((uint64_t) 0); })
 // Operations
-#define DYN_OP2(iop, fop, ta, a, tb, b) ({ velt_t outV; \
+#define DYN_OP2(op, ta, a, tb, b) ({ velt_t outV; \
   switch(VEREP(ta)) { \
   case INT: case UINT: \
     switch(VEREP(tb)) { \
-    case INT: case UINT: outV = velt((a.x) iop (b.x)); break;\
+    case INT: case UINT: outV = velt(op(a.x, b.x)); break;\
     default: throw trap_illegal_instruction(0); } break; \
   case FP: \
     switch(VEREP(tb)) { \
-    case FP: outV = velt(f128_##fop(a.f, b.f)); break;\
+    case FP: outV = velt(f128_##op(a.f, b.f)); break;\
     default: throw trap_illegal_instruction(0); } break; \
   default: throw trap_illegal_instruction(0); } \
   outV; })
@@ -493,28 +493,55 @@ static const vtype_t VECTOR = 4;
     (MMU.store_ ## func(a+eidx*st, b)); \
     })
 
+// Infix helpers
+#define vecadd(a, b) (a + b)
+#define vecsub(a, b) (a - b)
+#define vecdiv(a, b) (a / b)
+#define vecmul(a, b) (a * b)
+#define vecrem(a, b) (a % b)
+#define veceq(a, b) (a == b)
+#define vecne(a, b) (a != b)
+#define veclt(a, b) (a < b)
+#define vecge(a, b) (a >= b)
+#define vecsll(a, b) ((a) << (b))
+#define vecmax(a, b) (a > b ? a : b)
 // Redirect for INT and UINT
 #define mulAdd(a, b, c) ( a * b + c )
 #define mulSub(a, b, c) ( a * b + (-c) )
 #define negMulAdd(a, b, c) ( (-a) * b + (-c) )
 #define negMulSub(a, b, c) ( (-a) * b + c )
+// f128 helpers
 #define f128_mulSub(a, b, c) ( f128_mulAdd(a, b, f128_negate(c)) )
 #define f128_negMulAdd(a, b, c) ( f128_mulAdd(f128_negate(a), b, f128_negate(c)) )
 #define f128_negMulSub(a, b, c) ( f128_mulAdd(f128_negate(a), b, c) )
-#define f128_ne(a, b) (!f128_eq(a, b))
-#define f128_ge(a, b) (f128_le(b, a))
-#define DYN_ADD(ta, a, tb, b) DYN_OP2(+, add, ta, a ## _12, tb, b ## _12)
-#define DYN_ADDI(ta, a, b) DYN_OP2(+, add, ta, a ## _12, ta, b)
-#define DYN_DIV(ta, a, tb, b) DYN_OP2(/, div, ta, a ## _12, tb, b ## _12)
-#define DYN_MUL(ta, a, tb, b) DYN_OP2(*, mul, ta, a ## _12, tb, b ## _12)
-#define DYN_REM(ta, a, tb, b) DYN_OP2(%, rem, ta, a ## _12, tb, b ## _12)
-#define DYN_SEQ(ta, a, tb, b) DYN_OP2(==, eq, ta, a ## _12, tb, b ## _12)
-#define DYN_SNE(ta, a, tb, b) DYN_OP2(!=, ne, ta, a ## _12, tb, b ## _12)
-#define DYN_SLT(ta, a, tb, b) DYN_OP2(<, lt, ta, a ## _12, tb, b ## _12)
-#define DYN_SGE(ta, a, tb, b) DYN_OP2(>=, ge, ta, a ## _12, tb, b ## _12)
-#define DYN_SUB(ta, a, tb, b) DYN_OP2(-, sub, ta, a ## _12, tb, b ## _12)
-#define DYN_SL(ta, a, tb, b) DYN_OP2(<<, err, ta, a ## _12, tb, b ## _12)
-#define DYN_SLI(ta, a, b) DYN_OP2(<<, err, ta, a ## _12, ta, b)
+#define f128_vecadd(a, b) (f128_add(a, b))
+#define f128_vecsub(a, b) (f128_sub(a, b))
+#define f128_vecmul(a, b) (f128_mul(a, b))
+#define f128_vecdiv(a, b) (f128_div(a, b))
+#define f128_vecrem(a, b) (f128_rem(a, b))
+#define f128_veceq(a, b) (f128_eq(a, b))
+#define f128_vecne(a, b) (!f128_eq(a, b))
+#define f128_veclt(a, b) (f128_lt(a, b))
+#define f128_vecge(a, b) (f128_le(b, a))
+#define f128_vecsll(a, b) (f128_err(a, b))
+#define f128_vecmax(a, b) ({ \
+    bool greater = f128_lt_quiet(b, a) || (f128_eq(b, a) && (f128(b).v[1] & F64_SIGN));\
+    (isNaNF128(a) && isNaNF128(b)) ? defaultNaNF128() : \
+    (greater || isNaNF128(b) ? a : b); \
+    })
+#define DYN_ADD(ta, a, tb, b) DYN_OP2(vecadd, ta, a ## _12, tb, b ## _12)
+#define DYN_ADDI(ta, a, b) DYN_OP2(vecadd, ta, a ## _12, ta, b)
+#define DYN_DIV(ta, a, tb, b) DYN_OP2(vecdiv, ta, a ## _12, tb, b ## _12)
+#define DYN_MUL(ta, a, tb, b) DYN_OP2(vecmul, ta, a ## _12, tb, b ## _12)
+#define DYN_REM(ta, a, tb, b) DYN_OP2(vecrem, ta, a ## _12, tb, b ## _12)
+#define DYN_SEQ(ta, a, tb, b) DYN_OP2(veceq, ta, a ## _12, tb, b ## _12)
+#define DYN_SNE(ta, a, tb, b) DYN_OP2(vecne, ta, a ## _12, tb, b ## _12)
+#define DYN_SLT(ta, a, tb, b) DYN_OP2(veclt, ta, a ## _12, tb, b ## _12)
+#define DYN_SGE(ta, a, tb, b) DYN_OP2(vecge, ta, a ## _12, tb, b ## _12)
+#define DYN_SUB(ta, a, tb, b) DYN_OP2(vecsub, ta, a ## _12, tb, b ## _12)
+#define DYN_SL(ta, a, tb, b) DYN_OP2(vecsll, ta, a ## _12, tb, b ## _12)
+#define DYN_SLI(ta, a, b) DYN_OP2(vecsll, ta, a ## _12, ta, b)
+#define DYN_MAX(ta, a, tb, b) DYN_OP2(vecmax, ta, a ## _12, ta, b)
 #define DYN_MADD(ta, a, tb, b, tc, c) DYN_OP3(mulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
 #define DYN_MSUB(ta, a, tb, b, tc, c) DYN_OP3(mulSub, ta, a ## _123, tb, b ## _123, tc, c ## _123)
 #define DYN_NMADD(ta, a, tb, b, tc, c) DYN_OP3(negMulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
