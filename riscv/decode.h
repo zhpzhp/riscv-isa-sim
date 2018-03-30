@@ -303,10 +303,13 @@ static const vtype_t VECTOR = 4;
 
 #define VL_T(t) ( vIsScalar(t) ? 1 : STATE.vl )
 #define VL VL_T(TRD)
-#define VL_LOOP_T(t) for(size_t eidx = 0; eidx < VL_T(t); eidx++) {\
-  if(insn.rvv_mask() == 0x1 && !(READ_VREG(1).x & 0x1)) continue; \
-  if(insn.rvv_mask() == 0x2 && (READ_VREG(1).x & 0x1)) continue;
+#define VL_LOOP_FULL_T(t) for(size_t eidx = 0; eidx < VL_T(t); eidx++) {
+#define VL_LOOP_T(t) VL_LOOP_FULL_T(t) \
+  if(!VM) continue;
 #define VL_LOOP VL_LOOP_T(TRD)
+#define VL_LOOP_FULL VL_LOOP_FULL_T(TRD)
+#define VM ((insn.rvv_mask() == 0x1) ? READ_VREG(1).x & 0x1 : \
+           (insn.rvv_mask() == 0x2) ? !(READ_VREG(1).x & 0x1) : true)
 
 
 #define require_vec require_accelerator
@@ -505,6 +508,7 @@ static const vtype_t VECTOR = 4;
 #define vecge(a, b) (a >= b)
 #define vecsll(a, b) ((a) << (b))
 #define vecmax(a, b) (a > b ? a : b)
+#define vecmin(a, b) (a < b ? a : b)
 // Redirect for INT and UINT
 #define mulAdd(a, b, c) ( a * b + c )
 #define mulSub(a, b, c) ( a * b + (-c) )
@@ -529,6 +533,11 @@ static const vtype_t VECTOR = 4;
     (isNaNF128(a) && isNaNF128(b)) ? defaultNaNF128() : \
     (greater || isNaNF128(b) ? a : b); \
     })
+#define f128_vecmin(a, b) ({ \
+    bool less = f128_lt_quiet(a, b) || (f128_eq(a, b) && (f128(a).v[1] & F64_SIGN));\
+    (isNaNF128(a) && isNaNF128(b)) ? defaultNaNF128() : \
+    (less || isNaNF128(b) ? a : b); \
+    })
 #define DYN_ADD(ta, a, tb, b) DYN_OP2(vecadd, ta, a ## _12, tb, b ## _12)
 #define DYN_ADDI(ta, a, b) DYN_OP2(vecadd, ta, a ## _12, ta, b)
 #define DYN_DIV(ta, a, tb, b) DYN_OP2(vecdiv, ta, a ## _12, tb, b ## _12)
@@ -542,6 +551,7 @@ static const vtype_t VECTOR = 4;
 #define DYN_SL(ta, a, tb, b) DYN_OP2(vecsll, ta, a ## _12, tb, b ## _12)
 #define DYN_SLI(ta, a, b) DYN_OP2(vecsll, ta, a ## _12, ta, b)
 #define DYN_MAX(ta, a, tb, b) DYN_OP2(vecmax, ta, a ## _12, ta, b)
+#define DYN_MIN(ta, a, tb, b) DYN_OP2(vecmin, ta, a ## _12, ta, b)
 #define DYN_MADD(ta, a, tb, b, tc, c) DYN_OP3(mulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
 #define DYN_MSUB(ta, a, tb, b, tc, c) DYN_OP3(mulSub, ta, a ## _123, tb, b ## _123, tc, c ## _123)
 #define DYN_NMADD(ta, a, tb, b, tc, c) DYN_OP3(negMulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)

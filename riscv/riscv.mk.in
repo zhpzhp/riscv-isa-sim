@@ -293,7 +293,9 @@ riscv_insn_list = \
 	vldx \
 	vmadd \
 	vmax \
+	vmin \
 	vmul \
+	vmerge \
 	vmfirst \
 	vmpop \
 	vrem \
