@@ -305,6 +305,7 @@ riscv_insn_list = \
 	vslt \
 	vsge \
 	vsl \
+	vsli \
 	vst \
 	vsts \
 	vstx \
