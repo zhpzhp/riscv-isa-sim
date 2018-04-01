@@ -285,6 +285,8 @@ riscv_insn_list = \
 	sw \
 	vadd \
 	vaddi \
+	vand \
+	vandi \
 	vdiv \
 	vextract \
 	vinsert \
@@ -301,6 +303,8 @@ riscv_insn_list = \
 	vmsub \
 	vnmadd \
 	vnmsub \
+	vor \
+	vori \
 	vrem \
 	vseq \
 	vsne \
@@ -313,6 +317,8 @@ riscv_insn_list = \
 	vsts \
 	vstx \
 	vsub \
+	vxor \
+	vxori \
 	wfi \
 	xor \
 	xori \

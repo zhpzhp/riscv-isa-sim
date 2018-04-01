@@ -498,6 +498,9 @@ static const vtype_t VECTOR = 4;
 
 // Infix helpers
 #define vecadd(a, b) (a + b)
+#define vecand(a, b) (a & b)
+#define vecor(a, b) (a | b)
+#define vecxor(a, b) (a ^ b)
 #define vecsub(a, b) (a - b)
 #define vecdiv(a, b) (a / b)
 #define vecmul(a, b) (a * b)
@@ -528,6 +531,9 @@ static const vtype_t VECTOR = 4;
 #define f128_veclt(a, b) (f128_lt(a, b))
 #define f128_vecge(a, b) (f128_le(b, a))
 #define f128_vecsll(a, b) (f128_err(a, b))
+#define f128_vecand(a, b) (f128_err(a, b))
+#define f128_vecor(a, b) (f128_err(a, b))
+#define f128_vecxor(a, b) (f128_err(a, b))
 #define f128_vecmax(a, b) ({ \
     bool greater = f128_lt_quiet(b, a) || (f128_eq(b, a) && (f128(b).v[1] & F64_SIGN));\
     (isNaNF128(a) && isNaNF128(b)) ? defaultNaNF128() : \
@@ -540,6 +546,12 @@ static const vtype_t VECTOR = 4;
     })
 #define DYN_ADD(ta, a, tb, b) DYN_OP2(vecadd, ta, a ## _12, tb, b ## _12)
 #define DYN_ADDI(ta, a, b) DYN_OP2(vecadd, ta, a ## _12, ta, b)
+#define DYN_AND(ta, a, tb, b) DYN_OP2(vecand, ta, a ## _12, tb, b ## _12)
+#define DYN_ANDI(ta, a, b) DYN_OP2(vecand, ta, a ## _12, ta, b)
+#define DYN_OR(ta, a, tb, b) DYN_OP2(vecor, ta, a ## _12, tb, b ## _12)
+#define DYN_ORI(ta, a, b) DYN_OP2(vecor, ta, a ## _12, ta, b)
+#define DYN_XOR(ta, a, tb, b) DYN_OP2(vecxor, ta, a ## _12, tb, b ## _12)
+#define DYN_XORI(ta, a, b) DYN_OP2(vecxor, ta, a ## _12, ta, b)
 #define DYN_DIV(ta, a, tb, b) DYN_OP2(vecdiv, ta, a ## _12, tb, b ## _12)
 #define DYN_MUL(ta, a, tb, b) DYN_OP2(vecmul, ta, a ## _12, tb, b ## _12)
 #define DYN_REM(ta, a, tb, b) DYN_OP2(vecrem, ta, a ## _12, tb, b ## _12)
