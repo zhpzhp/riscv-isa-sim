@@ -298,6 +298,9 @@ riscv_insn_list = \
 	vmerge \
 	vmfirst \
 	vmpop \
+	vmsub \
+	vnmadd \
+	vnmsub \
 	vrem \
 	vseq \
 	vsne \
