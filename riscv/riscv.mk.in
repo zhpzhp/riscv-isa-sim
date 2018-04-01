@@ -313,6 +313,8 @@ riscv_insn_list = \
 	vsge \
 	vsl \
 	vsli \
+	vsr \
+	vsri \
 	vst \
 	vsts \
 	vstx \
