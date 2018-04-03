@@ -306,6 +306,7 @@ riscv_insn_list = \
 	vor \
 	vori \
 	vrem \
+	vselect \
 	vseq \
 	vsne \
 	vslide \
