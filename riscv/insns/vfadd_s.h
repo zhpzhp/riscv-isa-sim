@@ -1,0 +1,3 @@
+VL_LOOP
+  WRITE_FP_VRD(f32_add(f32(VFS1(FP32)), f32(VFS2(FP32))), FP32);
+}

@@ -1,3 +1,3 @@
 VL_LOOP
-  WRITE_VRD(0,0,0,DYN_LOAD(RS1+insn.rvv_load_imm()));
+  WRITE_INT_VRD(MMU.load_int64(RS1 + insn.rvv_load_imm()), INT64);
 }

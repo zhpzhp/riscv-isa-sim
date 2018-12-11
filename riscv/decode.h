@@ -231,6 +231,7 @@ private:
 #define unboxF32(r) (isBoxedF32(r) ? (uint32_t)r.v[0] : defaultNaNF32UI)
 #define isBoxedF64(r) ((r.v[1] + 1) == 0)
 #define unboxF64(r) (isBoxedF64(r) ? r.v[0] : defaultNaNF64UI)
+#define unbox(r, w) (vIs16(w) ? unboxF16(r) : vIs32(w) ? unboxF32(r) : vIs64(w) ? unboxF64(r) : throw trap_illegal_instruction(0))
 typedef float128_t freg_t;
 inline float16_t f16(uint16_t v) { return { v }; }
 inline float32_t f32(uint32_t v) { return { v }; }
@@ -308,9 +309,45 @@ static const vtype_t VECTOR = 4;
   if(!VM) continue;
 #define VL_LOOP VL_LOOP_T(TRD)
 #define VL_LOOP_FULL VL_LOOP_FULL_T(TRD)
-#define VM ((insn.rvv_mask() == 0x1) ? READ_VREG(1).x & 0x1 : \
+#define VM ((insn.rvv_mask() == 0x3) ? READ_VREG(1).x & 0x1 : \
            (insn.rvv_mask() == 0x2) ? !(READ_VREG(1).x & 0x1) : true)
 
+inline reg_t vregcfg(reg_t vregmax, reg_t vregd, reg_t vregq) {
+  return (vregq & 0x7) << 9 | (vregd & 0xf) << 5 | ((vregmax-1) & 0x1f);
+}
+
+inline reg_t vfastcfg(reg_t imm, reg_t old_cfg) {
+  reg_t prefix = (imm & 0x60) >> 5;
+  reg_t vregd = (imm & 0x07);
+  reg_t vregq = (imm & 0x18) >> 3;
+  if(prefix == 3)
+    return (old_cfg & 0xf000ffff) | (vregcfg(32, vregd, vregq) << 16);
+  if(prefix == 2)
+    return (old_cfg & 0xf000ffff) | (vregcfg(16, vregd, vregq) << 16);
+  prefix = (imm & 0x70) >> 4;
+  vregq = (imm & 0x08) >> 3;
+  if(prefix == 3)
+    return (old_cfg & 0xf000ffff) | (vregcfg(10, vregd, vregq) << 16);
+  if(prefix == 2)
+    return (old_cfg & 0xf000ffff) | (vregcfg(8, vregd, vregq) << 16);
+  prefix = (imm & 0x78) >> 3;
+  vregq = 0;
+  if(prefix == 3)
+    return (old_cfg & 0xf000ffff) | (vregcfg(6, vregd, vregq) << 16);
+  if(prefix == 2)
+    return (old_cfg & 0xf000ffff) | (vregcfg(5, vregd, vregq) << 16);
+  prefix = (imm & 0x7C) >> 2;
+  vregd = (imm & 0x03);
+  if(prefix == 3)
+    return (old_cfg & 0xf000ffff) | (vregcfg(4, vregd, vregq) << 16);
+  if(prefix == 2)
+    return (old_cfg & 0xf000ffff) | (vregcfg(3, vregd, vregq) << 16);
+  if(prefix == 1)
+    return (old_cfg & 0xf000ffff) | (vregcfg(2, vregd, vregq) << 16);
+  if(prefix == 0)
+    return (old_cfg & 0xf000ffff) | (vregcfg(1, vregd, vregq) << 16);
+  return 0; //TODO: Do we trap on bad configs or not?
+}
 
 #define require_vec require_accelerator
 #define dirty_vec_state dirty_ext_state
@@ -319,18 +356,29 @@ static const vtype_t VECTOR = 4;
 #else
 #define WRITE_VREG_ELEM(reg, elem, value) ({ \
     if(vIsFP(VTY(reg))) \
-      fprintf(stderr, "Writing V%d[%d]=%llx:%llx\n",reg,elem,value.f.v[1],value.f.v[0]); \
+      fprintf(stderr, "Writing V%lu[%lu]=%lx:%lx\n",reg,elem,value.f.v[1],value.f.v[0]); \
     else \
-      fprintf(stderr, "Writing V%d[%d]=%llx\n",reg,elem,value.x); \
+      fprintf(stderr, "Writing V%lu[%lu]=%lx\n",reg,elem,value.x); \
     STATE.VR[elem].write(reg, value);})
 #endif
 #define WRITE_VREG(reg, value) ({ \
-    vIsScalar(VTY(reg)) ? WRITE_VREG_ELEM(reg, 0, value) : WRITE_VREG_ELEM(reg, eidx, value); })
+    vIsScalar(VTY(reg)) ? WRITE_VREG_ELEM(reg, (uint64_t)0, value) : WRITE_VREG_ELEM(reg, eidx, value); })
 #define WRITE_VRD(v1,v2,v3,value) WRITE_VREG(insn.rd(), DYN_TRUNCATE(TRD, TIN(v1,v2,v3), value))
 #define READ_VREG_ELEM(reg, elem) ( STATE.VR[elem][reg] )
 #define READ_VREG(reg) ( vIsScalar(VTY(reg)) ? READ_VREG_ELEM(reg, 0) : READ_VREG_ELEM(reg, eidx) )
 
 #define VTYPE(S, R, W) ( (S << 11) | (R << 6) | W)
+#define UINT8 VTYPE(VECTOR, UINT, W8)
+#define INT8 VTYPE(VECTOR, INT, W8)
+#define UINT16 VTYPE(VECTOR, UINT, W16)
+#define INT16 VTYPE(VECTOR, INT, W16)
+#define UINT32 VTYPE(VECTOR, UINT, W32)
+#define INT32 VTYPE(VECTOR, INT, W32)
+#define UINT64 VTYPE(VECTOR, UINT, W64)
+#define INT64 VTYPE(VECTOR, INT, W64)
+#define FP16 VTYPE(VECTOR, FP, W16)
+#define FP32 VTYPE(VECTOR, FP, W32)
+#define FP64 VTYPE(VECTOR, FP, W64)
 #define VTY(reg) (STATE.vtype[reg])
 #define VEW(ty) (ty & 0x3f)
 #define VEREP(ty) ((ty >> 6) & 0x1f)
@@ -365,6 +413,26 @@ static const vtype_t VECTOR = 4;
 #define VS2_123 DYN_EXTEND(TIN_123, TRS2, READ_VREG(insn.rs2()))
 #define VS3_123 DYN_EXTEND(TIN_123, TRS3, READ_VREG(insn.rs3()))
 
+// Assumes you have only types defined in base
+#define MASK(w) (vIs8(w) ? 0xfful : vIs16(w) ? 0xfffful : vIs32(w) ? 0xfffffffful : 0xfffffffffffffffful)
+//TODO: Last return should be a sign extension to 128 or illegals inst
+// Assumes you never sext_to 8bits which is true in the current spec
+#define sext_to(v, w) (velt(vIs16(w) ? (sreg_t)(int16_t)(v.x) : vIs32(w) ? (sreg_t)(int32_t)(v.x) : vIs64(w) ? (sreg_t)(int64_t)(v.x) : v.x))
+#define trunc_to(v, w) (velt(v.x & MASK(w)))
+
+// Assumes no 128 bit fregs
+#define WRITE_FP_VRD(val, OP) (WRITE_VREG(insn.rd(), (VEW(TRD) > VEW(OP) ? velt(freg(val)) : VEW(TRD) == VEW(OP) ? velt(val) : throw trap_illegal_instruction(0) )))
+#define VFS1(OP) (VEW(TRS1)>VEW(OP) ? unbox(VS1.f, OP) : VEW(TRS1) == VEW(OP) ? VS1.f.v[0] : throw trap_illegal_instruction(0))
+#define VFS2(OP) (VEW(TRS2)>VEW(OP) ? unbox(VS2.f, OP) : VEW(TRS2) == VEW(OP) ? VS2.f.v[0] : throw trap_illegal_instruction(0))
+
+#define UIOP (TRS1)
+#define BIOP (std::max(VEW(TRS1), VEW(TRS2)))
+#define TIOP (std::max(VEW(TRS1), std::max(VEW(TRS2), VEW(TRS3))))
+#define WRITE_INT_VRD(val, OP) (WRITE_VREG(insn.rd(), (VEW(TRD) > VEW(OP) ? sext_to(velt(val), OP) : VEW(TRD) == VEW(OP) ? velt(val) : trunc_to(velt(val), OP))))
+#define VIS1(OP) (VEW(TRS1)>VEW(OP) ? trunc_to(VS1, OP).x : VEW(TRS1) == VEW(OP) ? velt(VS1).x : sext_to(VS1, OP).x)
+#define VIS2(OP) (VEW(TRS2)>VEW(OP) ? trunc_to(VS2, OP).x : VEW(TRS2) == VEW(OP) ? velt(VS2).x : sext_to(VS2, OP).x)
+#define VIS3(OP) (VEW(TRS3)>VEW(OP) ? trunc_to(VS3, OP).x : VEW(TRS3) == VEW(OP) ? velt(VS3).x : sext_to(VS3, OP).x)
+#define VIMM (velt(insn.rvv_imm()).x)
 
 // Type permotion and demotion
 #define INTER_TYPE(v1, t1, v2, t2, v3, t3) ({ \
@@ -495,6 +563,9 @@ static const vtype_t VECTOR = 4;
 #define DYN_STORE_ST_TY(a, st, func, b) ({ \
     (MMU.store_ ## func(a+eidx*st, b)); \
     })
+
+//TODO: vinsert and vextract should use integer truncate rules?
+
 
 // Infix helpers
 #define vecadd(a, b) (a + b)

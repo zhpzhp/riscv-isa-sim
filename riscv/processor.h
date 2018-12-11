@@ -127,8 +127,13 @@ struct state_t
   uint32_t frm;
   bool serialized; // whether timer CSRs are in a well-defined state
 
-  vtype_t vtype[NVR];
+  // RVV CSRs
+  uint32_t vcfg;
   reg_t vl;
+  reg_t vlmax;
+  uint32_t vregmask; //This could be recalculated every read
+  uint32_t vxcfg;
+  vtype_t vtype[NVR];
 
   // When true, execute a single instruction and then enter debug mode.  This
   // can only be set by executing dret.

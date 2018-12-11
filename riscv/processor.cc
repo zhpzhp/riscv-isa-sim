@@ -342,72 +342,178 @@ void processor_t::set_csr(int which, reg_t val)
       state.fflags = (val & FSR_AEXC) >> FSR_AEXC_SHIFT;
       state.frm = (val & FSR_RD) >> FSR_RD_SHIFT;
       break;
+    case CSR_VCFG: {
+      dirty_vec_state;
+      state.vcfg = val;
+      uint16_t vsew = (val >> 28) & 0x7;
+      uint16_t vregcfg = (val >> 16) & 0xfff; //TODO: Validate vregcfg
+      uint8_t vregmax = vregcfg & 0x1f;
+      uint8_t vregd = (vregcfg >> 5) & 0xf;
+      uint8_t vregq = (vregcfg >> 9) & 0x7;
+      bool vtypeen = (val >> 31) & 0x1;
+      fprintf(stderr, "vcfg:vsew:%u:vregcfg:%u:vregmax:%u:vregd:%u:vregq:%u\n",vsew,vregcfg,vregmax,vregd,vregq);
+
+      uint64_t q_start = 4 * (floor(vregmax / 4) - vregq);
+      uint64_t d_hole = floor(vregmax / 2) - (2 * floor(vregmax / 4));
+      uint64_t d_start = q_start - (2 * (vregd - d_hole));
+      uint64_t q_width = vsew == W8 ? W32 : vsew == W16 ? W64 : W128;
+      uint64_t d_width = vsew == W8 ? W16 : vsew == W16 ? W32 : vsew == W32 ? W64: W128;
+      fprintf(stderr, "vcfg::q_start:%lu:d_hole:%lu:d_start:%lu\n",q_start,d_hole,d_start);
+      for(size_t i = 0; i < NVR; i++) {
+        for(size_t j = 0; j < state.max_vlen; j++) {
+          state.VR[j].write(i, velt(0));
+        }
+        if(i > vregmax) {
+          state.vtype[i] = VTYPE(VECTOR, UINT, 0);
+          continue;
+        }
+        state.vtype[i] = VTYPE(VECTOR, UINT, vsew);
+        state.vregmask |= (1 << i);
+        if(i > d_start && i % 2 == 0) {
+          fprintf(stderr, "Setting up D reg at %lu\n",i);
+          state.vtype[i] = VTYPE(VECTOR, UINT, d_width);
+          state.vregmask |= (1 << i);
+          state.vtype[i+1] = VTYPE(VECTOR, UINT, 0);
+          state.vregmask &= ~(1 << (i+1));
+        }
+        if(i > q_start && i % 4 == 0) {
+          fprintf(stderr, "Setting up Q reg at %lu\n",i);
+          state.vtype[i] = VTYPE(VECTOR, UINT, q_width);
+          state.vregmask |= (1 << i);
+          state.vtype[i+1] = VTYPE(VECTOR, UINT, 0);
+          state.vregmask &= ~(1 << (i+1));
+          state.vtype[i+2] = VTYPE(VECTOR, UINT, 0);
+          state.vregmask &= ~(1 << (i+2));
+          state.vtype[i+3] = VTYPE(VECTOR, UINT, 0);
+          state.vregmask &= ~(1 << (i+3));
+        }
+      }
+      state.vlmax = (reg_t)state.max_vlen;
+      state.vl = (reg_t)state.max_vlen;
+      break;
+    }
     case CSR_VL:
-      dirty_vec_state;
-      state.vl = std::min(std::max(val,(reg_t)0), (reg_t)state.max_vlen);
+      //TODO: Read-only
       break;
-    case CSR_VXRM: //TODO: Implement Vector rounding modes
-    case CSR_VXSAT:
-      dirty_vec_state;
+    case CSR_VLMAX:
+      //TODO: Read-only
       break;
-    case CSR_VMAXEW:
-      dirty_vec_state; //TODO: Correct max_vl based on this
+    case CSR_VREGMASK:
+      //TODO: Read-only
       break;
-    case CSR_VCFG0:
+    case CSR_VXCFG: //TODO: Implement Vector fixed point
+      break;
+    case CSR_VTCFG0:
       dirty_vec_state;
       state.vtype[0] = val & 0xffff;
       state.vtype[1] = (val >> 16) & 0xffff;
-      state.vtype[2] = (val >> 32) & 0xffff;
-      state.vtype[3] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[2] = (val >> 32) & 0xffff;
+        state.vtype[3] = (val >> 48) & 0xffff;
+      }
       break;
-    case CSR_VCFG2:
+    case CSR_VTCFG1: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[2] = val & 0xffff;
+      state.vtype[3] = (val >> 16) & 0xffff;
+      break;
+    case CSR_VTCFG2:
       dirty_vec_state;
       state.vtype[4] = val & 0xffff;
       state.vtype[5] = (val >> 16) & 0xffff;
-      state.vtype[6] = (val >> 32) & 0xffff;
-      state.vtype[7] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[6] = (val >> 32) & 0xffff;
+        state.vtype[7] = (val >> 48) & 0xffff;
+      }
       break;
-    case CSR_VCFG4:
+    case CSR_VTCFG3: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[6] = val & 0xffff;
+      state.vtype[7] = (val >> 16) & 0xffff;
+      break;
+    case CSR_VTCFG4:
       dirty_vec_state;
       state.vtype[8] = val & 0xffff;
       state.vtype[9] = (val >> 16) & 0xffff;
-      state.vtype[10] = (val >> 32) & 0xffff;
-      state.vtype[11] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[10] = (val >> 32) & 0xffff;
+        state.vtype[11] = (val >> 48) & 0xffff;
+      }
       break;
-    case CSR_VCFG6:
+    case CSR_VTCFG5: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[10] = val & 0xffff;
+      state.vtype[11] = (val >> 16) & 0xffff;
+      break;
+    case CSR_VTCFG6:
       dirty_vec_state;
       state.vtype[12] = val & 0xffff;
       state.vtype[13] = (val >> 16) & 0xffff;
-      state.vtype[14] = (val >> 32) & 0xffff;
-      state.vtype[15] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[14] = (val >> 32) & 0xffff;
+        state.vtype[15] = (val >> 48) & 0xffff;
+      }
       break;
-    case CSR_VCFG8:
+    case CSR_VTCFG7: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[14] = val & 0xffff;
+      state.vtype[15] = (val >> 16) & 0xffff;
+      break;
+    case CSR_VTCFG8:
       dirty_vec_state;
       state.vtype[16] = val & 0xffff;
       state.vtype[17] = (val >> 16) & 0xffff;
-      state.vtype[18] = (val >> 32) & 0xffff;
-      state.vtype[19] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[18] = (val >> 32) & 0xffff;
+        state.vtype[19] = (val >> 48) & 0xffff;
+      }
       break;
-    case CSR_VCFG10:
+    case CSR_VTCFG9: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[18] = val & 0xffff;
+      state.vtype[19] = (val >> 16) & 0xffff;
+      break;
+    case CSR_VTCFG10:
       dirty_vec_state;
       state.vtype[20] = val & 0xffff;
       state.vtype[21] = (val >> 16) & 0xffff;
-      state.vtype[22] = (val >> 32) & 0xffff;
-      state.vtype[23] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[22] = (val >> 32) & 0xffff;
+        state.vtype[23] = (val >> 48) & 0xffff;
+      }
       break;
-    case CSR_VCFG12:
+    case CSR_VTCFG11: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[22] = val & 0xffff;
+      state.vtype[23] = (val >> 16) & 0xffff;
+      break;
+    case CSR_VTCFG12:
       dirty_vec_state;
       state.vtype[24] = val & 0xffff;
       state.vtype[25] = (val >> 16) & 0xffff;
-      state.vtype[26] = (val >> 32) & 0xffff;
-      state.vtype[27] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[26] = (val >> 32) & 0xffff;
+        state.vtype[27] = (val >> 48) & 0xffff;
+      }
       break;
-    case CSR_VCFG14:
+    case CSR_VTCFG13: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[26] = val & 0xffff;
+      state.vtype[27] = (val >> 16) & 0xffff;
+      break;
+    case CSR_VTCFG14:
       dirty_vec_state;
       state.vtype[28] = val & 0xffff;
       state.vtype[29] = (val >> 16) & 0xffff;
-      state.vtype[30] = (val >> 32) & 0xffff;
-      state.vtype[31] = (val >> 48) & 0xffff;
+      if(xlen == 64) {
+        state.vtype[30] = (val >> 32) & 0xffff;
+        state.vtype[31] = (val >> 48) & 0xffff;
+      }
+      break;
+    case CSR_VTCFG15: //TODO: only available in RV32
+      dirty_vec_state;
+      state.vtype[30] = val & 0xffff;
+      state.vtype[31] = (val >> 16) & 0xffff;
       break;
     case CSR_MSTATUS: {
       if ((val ^ state.mstatus) &
@@ -624,54 +730,64 @@ reg_t processor_t::get_csr(int which)
       if (!supports_extension('F'))
         break;
       return (state.fflags << FSR_AEXC_SHIFT) | (state.frm << FSR_RD_SHIFT);
+    case CSR_VCFG:
+      require_vec;
+      if (!supports_extension('V'))
+        break;
+      return state.vcfg;
     case CSR_VL:
       require_vec;
       if (!supports_extension('V'))
         break;
       return state.vl;
-    case CSR_VXRM: //TODO: Implement Vector rounding modes
-    case CSR_VXSAT:
-    case CSR_VMAXEW: //TODO: Correct max_vl based on this
+    case CSR_VLMAX:
       require_vec;
       if (!supports_extension('V'))
         break;
-      return 0;
-    case CSR_VCFG0:
+      return state.vlmax;
+    case CSR_VREGMASK:
+      require_vec;
+      if (!supports_extension('V'))
+        break;
+      return state.vregmask;
+    case CSR_VXCFG: //TODO: Implement Vector fixed point
+      return state.vxcfg;
+    case CSR_VTCFG0:
       require_vec;
       if (!supports_extension('V'))
         break;
       return (state.vtype[3] << 48) | (state.vtype[2] << 32) | (state.vtype[1] << 16) | state.vtype[0];
-    case CSR_VCFG2:
+    case CSR_VTCFG2:
       require_vec;
       if (!supports_extension('V'))
         break;
       return (state.vtype[7] << 48) | (state.vtype[6] << 32) | (state.vtype[5] << 16) | state.vtype[4];
-    case CSR_VCFG4:
+    case CSR_VTCFG4:
       require_vec;
       if (!supports_extension('V'))
         break;
       return (state.vtype[11] << 48) | (state.vtype[10] << 32) | (state.vtype[9] << 16) | state.vtype[8];
-    case CSR_VCFG6:
+    case CSR_VTCFG6:
       require_vec;
       if (!supports_extension('V'))
         break;
       return (state.vtype[15] << 48) | (state.vtype[14] << 32) | (state.vtype[13] << 16) | state.vtype[12];
-    case CSR_VCFG8:
+    case CSR_VTCFG8:
       require_vec;
       if (!supports_extension('V'))
         break;
       return (state.vtype[19] << 48) | (state.vtype[18] << 32) | (state.vtype[17] << 16) | state.vtype[16];
-    case CSR_VCFG10:
+    case CSR_VTCFG10:
       require_vec;
       if (!supports_extension('V'))
         break;
       return (state.vtype[23] << 48) | (state.vtype[22] << 32) | (state.vtype[21] << 16) | state.vtype[20];
-    case CSR_VCFG12:
+    case CSR_VTCFG12:
       require_vec;
       if (!supports_extension('V'))
         break;
       return (state.vtype[27] << 48) | (state.vtype[26] << 32) | (state.vtype[25] << 16) | state.vtype[24];
-    case CSR_VCFG14:
+    case CSR_VTCFG14:
       require_vec;
       if (!supports_extension('V'))
         break;

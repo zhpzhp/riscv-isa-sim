@@ -283,6 +283,8 @@ riscv_insn_list = \
 	sub \
 	subw \
 	sw \
+	vconfig \
+	vsetvl \
 	vadd \
 	vaddi \
 	vand \
@@ -290,38 +292,15 @@ riscv_insn_list = \
 	vdiv \
 	vextract \
 	vinsert \
+	vlb \
+	vlbu \
+	vlh \
+	vlhu \
+	vlw \
+	vlwu \
 	vld \
-	vlds \
-	vldx \
 	vmadd \
-	vmax \
-	vmin \
-	vmul \
-	vmerge \
-	vmfirst \
-	vmpop \
-	vmsub \
-	vnmadd \
-	vnmsub \
-	vor \
-	vori \
-	vrem \
-	vselect \
-	vseq \
-	vsne \
-	vslide \
-	vslt \
-	vsge \
-	vsl \
-	vsli \
-	vsr \
-	vsri \
-	vst \
-	vsts \
-	vstx \
-	vsub \
-	vxor \
-	vxori \
+	vfadd_s \
 	wfi \
 	xor \
 	xori \
