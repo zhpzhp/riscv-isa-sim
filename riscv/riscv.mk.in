@@ -290,6 +290,17 @@ riscv_insn_list = \
 	vaddw_vs \
 	vaddw_wv \
 	vaddw_ws \
+	vlb_v \
+	vlbu_v \
+	vlsb_v \
+	vlxb_v \
+	vle_v \
+	vlse_v \
+	vsb_v \
+	vssb_v \
+	vsxb_v \
+	vse_v \
+	vsse_v \
 	vsetvl \
 	vsetvli \
 	wfi \
