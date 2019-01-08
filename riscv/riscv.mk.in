@@ -284,6 +284,12 @@ riscv_insn_list = \
 	subw \
 	sw \
 	vadd_vv \
+	vadd_vi \
+	vadd_vs \
+	vaddw_vv \
+	vaddw_vs \
+	vaddw_wv \
+	vaddw_ws \
 	vsetvl \
 	vsetvli \
 	wfi \
