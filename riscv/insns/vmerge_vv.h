@@ -1,0 +1,3 @@
+VL_LOOP_FULL
+  WRITE_VRD(velt(VM ? VS2 : VS1));
+}

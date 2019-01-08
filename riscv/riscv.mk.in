@@ -290,6 +290,11 @@ riscv_insn_list = \
 	vaddw_vs \
 	vaddw_wv \
 	vaddw_ws \
+	vmadd_vvv \
+	vmv_x_v \
+	vmerge_vv \
+	vmfirst \
+	vmpopc \
 	vlb_v \
 	vlbu_v \
 	vlsb_v \
@@ -301,6 +306,9 @@ riscv_insn_list = \
 	vsxb_v \
 	vse_v \
 	vsse_v \
+	viota_v \
+	vslideup_vs \
+	vslidedown_vs \
 	vsetvl \
 	vsetvli \
 	wfi \
