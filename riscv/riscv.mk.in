@@ -283,24 +283,9 @@ riscv_insn_list = \
 	sub \
 	subw \
 	sw \
-	vconfig \
+	vadd_vv \
 	vsetvl \
-	vadd \
-	vaddi \
-	vand \
-	vandi \
-	vdiv \
-	vextract \
-	vinsert \
-	vlb \
-	vlbu \
-	vlh \
-	vlhu \
-	vlw \
-	vlwu \
-	vld \
-	vmadd \
-	vfadd_s \
+	vsetvli \
 	wfi \
 	xor \
 	xori \

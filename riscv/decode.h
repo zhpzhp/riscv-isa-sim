@@ -102,10 +102,13 @@ public:
   uint64_t rvc_rs1s() { return 8 + x(7, 3); }
   uint64_t rvc_rs2s() { return 8 + x(2, 3); }
 
-  int64_t rvv_imm() { return xs(20, 8); }
-  int64_t rvv_load_imm() { return x(27, 5); }
-  int64_t rvv_store_imm() { return x(7, 5); }
-  uint64_t rvv_mask() { return x(12, 2); }
+  int64_t rvv_imm() { return xs(20, 5); }
+  int64_t rvv_uload_imm() { return (x(20, 5) + (xs(30, 2) << 5)); }
+  int64_t rvv_load_imm() { return xs(30, 2); }
+  int64_t rvv_ustore_imm() { return (x(20, 5) + (xs(10, 2) << 5)); }
+  int64_t rvv_store_imm() { return xs(10, 2); }
+  uint64_t rvv_conf_imm() { return (x(20, 7) << 3) + (x(12,3)); }
+  uint64_t rvv_mask() { return x(25, 2); }
 private:
   insn_bits_t b;
   uint64_t x(int lo, int len) { return (b >> lo) & ((insn_bits_t(1) << len)-1); }
@@ -272,302 +275,255 @@ inline freg_t f128_negate(freg_t a)
 }
 
 /* Vector extension wrappers */
+//ELEN is fixed at 64bit
+#define ELEN 64
+#define ELEN_GROUPS 8
+#define VLEN (ELEN_GROUPS*ELEN)
 typedef union velt {
-  reg_t x;
-  freg_t f;
+  uint8_t b[8];
+  uint16_t h[4];
+  uint32_t w[2];
+  uint64_t d;
 } velt_t;
-inline velt_t velt(float16_t f) { velt_t elt; elt.f = {((uint64_t)-1 << 16) | f.v, (uint64_t)-1 }; return elt; }
-inline velt_t velt(float32_t f) { velt_t elt; elt.f = {((uint64_t)-1 << 32) | f.v, (uint64_t)-1 }; return elt; }
-inline velt_t velt(float64_t f) { velt_t elt; elt.f = {f.v, (uint64_t)-1 }; return elt; }
-inline velt_t velt(float128_t f) { velt_t elt; elt.f = f; return elt; }
-inline velt_t velt(bool x) { return { .x=x }; }
-inline velt_t velt(uint8_t x) { return { .x=x }; }
-inline velt_t velt(uint16_t x) { return { .x=x }; }
-inline velt_t velt(uint32_t x) { return { .x=x }; }
-inline velt_t velt(uint64_t x) { return { .x=x }; }
-inline velt_t velt(int8_t x) { return { .x=(uint8_t)x }; }
-inline velt_t velt(int16_t x) { return { .x=(uint16_t)x }; }
-inline velt_t velt(int32_t x) { return { .x=(uint32_t)x }; }
-inline velt_t velt(int64_t x) { return { .x=(uint64_t)x }; }
-inline velt_t velt(velt_t v) { return v; }
-typedef uint64_t vtype_t;
-static const vtype_t UINT = 0;
-static const vtype_t INT = 1;
-static const vtype_t FP = 3;
-static const vtype_t W128 = 48;
-static const vtype_t W64 = 32;
-static const vtype_t W32 = 24;
-static const vtype_t W16 = 16;
-static const vtype_t W8 = 8;
-static const vtype_t SCALAR = 0;
-static const vtype_t VECTOR = 4;
 
-#define VL_T(t) ( vIsScalar(t) ? 1 : STATE.vl )
-#define VL VL_T(TRD)
-#define VL_LOOP_FULL_T(t) for(size_t eidx = 0; eidx < VL_T(t); eidx++) {
-#define VL_LOOP_T(t) VL_LOOP_FULL_T(t) \
-  if(!VM) continue;
-#define VL_LOOP VL_LOOP_T(TRD)
-#define VL_LOOP_FULL VL_LOOP_FULL_T(TRD)
-#define VM ((insn.rvv_mask() == 0x3) ? READ_VREG(1).x & 0x1 : \
-           (insn.rvv_mask() == 0x2) ? !(READ_VREG(1).x & 0x1) : true)
-
-inline reg_t vregcfg(reg_t vregmax, reg_t vregd, reg_t vregq) {
-  return (vregq & 0x7) << 9 | (vregd & 0xf) << 5 | ((vregmax-1) & 0x1f);
-}
-
-inline reg_t vfastcfg(reg_t imm, reg_t old_cfg) {
-  reg_t prefix = (imm & 0x60) >> 5;
-  reg_t vregd = (imm & 0x07);
-  reg_t vregq = (imm & 0x18) >> 3;
-  if(prefix == 3)
-    return (old_cfg & 0xf000ffff) | (vregcfg(32, vregd, vregq) << 16);
-  if(prefix == 2)
-    return (old_cfg & 0xf000ffff) | (vregcfg(16, vregd, vregq) << 16);
-  prefix = (imm & 0x70) >> 4;
-  vregq = (imm & 0x08) >> 3;
-  if(prefix == 3)
-    return (old_cfg & 0xf000ffff) | (vregcfg(10, vregd, vregq) << 16);
-  if(prefix == 2)
-    return (old_cfg & 0xf000ffff) | (vregcfg(8, vregd, vregq) << 16);
-  prefix = (imm & 0x78) >> 3;
-  vregq = 0;
-  if(prefix == 3)
-    return (old_cfg & 0xf000ffff) | (vregcfg(6, vregd, vregq) << 16);
-  if(prefix == 2)
-    return (old_cfg & 0xf000ffff) | (vregcfg(5, vregd, vregq) << 16);
-  prefix = (imm & 0x7C) >> 2;
-  vregd = (imm & 0x03);
-  if(prefix == 3)
-    return (old_cfg & 0xf000ffff) | (vregcfg(4, vregd, vregq) << 16);
-  if(prefix == 2)
-    return (old_cfg & 0xf000ffff) | (vregcfg(3, vregd, vregq) << 16);
-  if(prefix == 1)
-    return (old_cfg & 0xf000ffff) | (vregcfg(2, vregd, vregq) << 16);
-  if(prefix == 0)
-    return (old_cfg & 0xf000ffff) | (vregcfg(1, vregd, vregq) << 16);
-  return 0; //TODO: Do we trap on bad configs or not?
-}
+template <size_t N, bool zero_reg>
+class vec_regfile_t
+{
+public:
+  void write_d(size_t i, uint64_t value)
+  {
+    if (!zero_reg || i != 0)
+      data[i].d = value;
+  }
+  void write_w(size_t i, size_t j, uint32_t value)
+  {
+    if (!zero_reg || i != 0)
+      data[i].w[j] = value;
+  }
+  void write_h(size_t i, size_t j, uint16_t value)
+  {
+    if (!zero_reg || i != 0)
+      data[i].h[j] = value;
+  }
+  void write_b(size_t i, size_t j, uint8_t value)
+  {
+    if (!zero_reg || i != 0)
+      data[i].b[j] = value;
+  }
+  const velt_t& operator [] (size_t i) const
+  {
+    return data[i];
+  }
+private:
+  velt_t data[N];
+};
 
 #define require_vec require_accelerator
 #define dirty_vec_state dirty_ext_state
+#define VL (insn.rvv_mask() == 0x2 ? 1 : STATE.vl)
+#define VL_LOOP_FULL for(size_t eidx = 0; eidx < VL; eidx++) {
+#define VL_LOOP VL_LOOP_FULL \
+  if(!VM) continue;
+#define VM ((insn.rvv_mask() == 0x1) ? READ_VREG(0) & 0x1 : \
+           (insn.rvv_mask() == 0x0) ? !(READ_VREG(0) & 0x1) : true)
+
+#define EGRP(elem) ( elem / (ELEN/SEW) )
+#define RGRP(reg, elem, width) ( reg + (elem % width))
+#define SGRP(elem, width) ( elem % ((ELEN/SEW)/width) )
+#define READ_VREG_ELEM(reg, elem, type, width) ( \
+    vIs8(type, width) ? \
+      STATE.VR[EGRP(elem)][RGRP(reg, elem, width)].b[SGRP(elem, width)] : \
+    vIs16(type, width) ? \
+      STATE.VR[EGRP(elem)][RGRP(reg, elem, width)].h[SGRP(elem, width)] : \
+    vIs32(type, width) ? \
+      STATE.VR[EGRP(elem)][RGRP(reg, elem, width)].w[SGRP(elem, width)] : \
+      STATE.VR[EGRP(elem)][RGRP(reg, elem, width)].d )
+#define READ_VREG(reg) ( READ_VREG_ELEM(reg, eidx, VSEW, 1) )
+#define READ_VREG_W(reg) ( READ_VREG_ELEM(reg, eidx, VSEW, 2) )
 #ifndef RISCV_ENABLE_COMMITLOG
-#define WRITE_VREG_ELEM(reg, elem, value) ({ STATE.VR[elem].write(reg, value); })
+#define WRITE_VREG_ELEM(reg, elem, value, type, width) ({ \
+    if(vIs8(type, width)) { \
+      STATE.VR[EGRP(elem)].write_b(RGRP(reg, elem, width), SGRP(elem, width), value.b[0]); \
+    } else if(vIs16(type, width)) { \
+      STATE.VR[EGRP(elem)].write_h(RGRP(reg, elem, width), SGRP(elem, width), value.h[0]); \
+    } else if(vIs32(type, width)) { \
+      STATE.VR[EGRP(elem)].write_w(RGRP(reg, elem, width), SGRP(elem, width), value.w[0]); \
+    } else if(vIs64(type, width)) { \
+      STATE.VR[EGRP(elem)].write_d(RGRP(reg, elem, width), value.d); \
+    }})
 #else
-#define WRITE_VREG_ELEM(reg, elem, value) ({ \
-    if(vIsFP(VTY(reg))) \
-      fprintf(stderr, "Writing V%lu[%lu]=%lx:%lx\n",reg,elem,value.f.v[1],value.f.v[0]); \
-    else \
-      fprintf(stderr, "Writing V%lu[%lu]=%lx\n",reg,elem,value.x); \
-    STATE.VR[elem].write(reg, value);})
+#define WRITE_VREG_ELEM(reg, elem, value, type, width) ({ \
+    if(vIs8(type, width)) { \
+      fprintf(stderr, "Writing V%llu[%lu]=%hhx\n",reg,elem,value.b[0]); \
+      STATE.VR[EGRP(elem)].write_b(RGRP(reg, elem, width), SGRP(elem, width), value.b[0]); \
+    } else if(vIs16(type, width)) { \
+      fprintf(stderr, "Writing V%llu[%lu]=%hx\n",reg,elem,value.h[0]); \
+      STATE.VR[EGRP(elem)].write_h(RGRP(reg, elem, width), SGRP(elem, width), value.h[0]); \
+    } else if(vIs32(type, width)) { \
+      fprintf(stderr, "Writing V%llu[%lu]=%x\n",reg,elem,value.w[0]); \
+      STATE.VR[EGRP(elem)].write_w(RGRP(reg, elem, width), SGRP(elem, width), value.w[0]); \
+    } else if(vIs64(type, width)) { \
+      fprintf(stderr, "Writing V%llu[%lu]=%llx\n",reg,elem,value.d); \
+      STATE.VR[EGRP(elem)].write_d(RGRP(reg, elem, width), value.d); \
+    }})
 #endif
-#define WRITE_VREG(reg, value) ({ \
-    vIsScalar(VTY(reg)) ? WRITE_VREG_ELEM(reg, (uint64_t)0, value) : WRITE_VREG_ELEM(reg, eidx, value); })
-#define WRITE_VRD(v1,v2,v3,value) WRITE_VREG(insn.rd(), DYN_TRUNCATE(TRD, TIN(v1,v2,v3), value))
-#define READ_VREG_ELEM(reg, elem) ( STATE.VR[elem][reg] )
-#define READ_VREG(reg) ( vIsScalar(VTY(reg)) ? READ_VREG_ELEM(reg, 0) : READ_VREG_ELEM(reg, eidx) )
+#define WRITE_VREG(reg, value, type, width) ({ WRITE_VREG_ELEM(reg, eidx, value, type, width); })
 
-#define VTYPE(S, R, W) ( (S << 11) | (R << 6) | W)
-#define UINT8 VTYPE(VECTOR, UINT, W8)
-#define INT8 VTYPE(VECTOR, INT, W8)
-#define UINT16 VTYPE(VECTOR, UINT, W16)
-#define INT16 VTYPE(VECTOR, INT, W16)
-#define UINT32 VTYPE(VECTOR, UINT, W32)
-#define INT32 VTYPE(VECTOR, INT, W32)
-#define UINT64 VTYPE(VECTOR, UINT, W64)
-#define INT64 VTYPE(VECTOR, INT, W64)
-#define FP16 VTYPE(VECTOR, FP, W16)
-#define FP32 VTYPE(VECTOR, FP, W32)
-#define FP64 VTYPE(VECTOR, FP, W64)
-#define VTY(reg) (STATE.vtype[reg])
-#define VEW(ty) (ty & 0x3f)
-#define VEREP(ty) ((ty >> 6) & 0x1f)
-#define VESHAPE(ty) ((ty >> 11) & 0x1f)
-#define vIsInt(t) ( VEREP(t) == INT )
-#define vIsUInt(t) ( VEREP(t) == UINT )
-#define vIsFP(t) ( VEREP(t) == FP )
-#define vIs128(t) ( VEW(t) == W128 )
-#define vIs64(t) ( VEW(t) == W64 )
-#define vIs32(t) ( VEW(t) == W32 )
-#define vIs16(t) ( VEW(t) == W16 )
-#define vIs8(t) ( VEW(t) == W8 )
-#define vIsScalar(t) ( VESHAPE(t) == SCALAR )
-#define vIsVector(t) ( VESHAPE(t) == VECTOR )
-
-#define TRD VTY(insn.rd())
-#define TRS1 VTY(insn.rs1())
-#define TRS2 VTY(insn.rs2())
-#define TRS3 VTY(insn.rs3())
-#define TIN(v1,v2,v3) INTER_TYPE(v1, TRS1, v2, TRS2, v3, TRS3)
-#define TIN_1 TIN(1, 0, 0)
-#define TIN_12 TIN(1, 1, 0)
-#define TIN_123 TIN(1, 1, 1)
-#define TIN_3 TIN(0, 0, 1)
-#define VS1 (READ_VREG(insn.rs1())) // TODO: why can't we remove these
+#define WRITE_VRD(value) WRITE_VREG(insn.rd(), value, VSEW, 1)
+#define WRITE_VRD_W(value) WRITE_VREG(insn.rd(), value, VSEW, 2)
+#define WRITE_VRD_TYPE(value, type) WRITE_VREG(insn.rd(), value, type, 1)
+#define VS1 (READ_VREG(insn.rs1()))
+#define VS1_W (READ_VREG_W(insn.rs1()))
+#define VSS1 (READ_VREG_ELEM(insn.rs1(), 0, VSEW, 1))
 #define VS2 (READ_VREG(insn.rs2()))
+#define VS2_W (READ_VREG_W(insn.rs2()))
+#define VSS2 (READ_VREG_ELEM(insn.rs2(), 0, VSEW, 1))
 #define VS3 (READ_VREG(insn.rs3()))
-#define VS1_12 DYN_EXTEND(TIN_12, TRS1, READ_VREG(insn.rs1()))
-#define VS2_12 DYN_EXTEND(TIN_12, TRS2, READ_VREG(insn.rs2()))
-#define VS3_3 DYN_EXTEND(TIN_3, TRS3, READ_VREG(insn.rs3()))
-#define VS1_123 DYN_EXTEND(TIN_123, TRS1, READ_VREG(insn.rs1()))
-#define VS2_123 DYN_EXTEND(TIN_123, TRS2, READ_VREG(insn.rs2()))
-#define VS3_123 DYN_EXTEND(TIN_123, TRS3, READ_VREG(insn.rs3()))
+#define VS3_W (READ_VREG_W(insn.rs3()))
+#define VSS3 (READ_VREG_ELEM(insn.rs3(), 0, VSEW, 1))
+#define VIMM (vIs8(VSEW, 1) ? velt(insn.rvv_imm()).b[0] : \
+              vIs16(VSEW, 1) ? velt(insn.rvv_imm()).h[0] : \
+              vIs32(VSEW, 1) ? velt(insn.rvv_imm()).w[0] : \
+              velt(insn.rvv_imm()).d)
 
-// Assumes you have only types defined in base
-#define MASK(w) (vIs8(w) ? 0xfful : vIs16(w) ? 0xfffful : vIs32(w) ? 0xfffffffful : 0xfffffffffffffffful)
-//TODO: Last return should be a sign extension to 128 or illegals inst
-// Assumes you never sext_to 8bits which is true in the current spec
-#define sext_to(v, w) (velt(vIs16(w) ? (sreg_t)(int16_t)(v.x) : vIs32(w) ? (sreg_t)(int32_t)(v.x) : vIs64(w) ? (sreg_t)(int64_t)(v.x) : v.x))
-#define trunc_to(v, w) (velt(v.x & MASK(w)))
+#define VTYPE (STATE.vtype)
+#define VW(t) (t & 7)
+#define VSEW (VW(VTYPE))
+#define VLMUL ((VTYPE >> 6) & 0x3)
+#define VR(t) ((t >> 8) & 0x1)
+#define VREP (VR(VTYPE))
+#define VTY(w, mul, rep) ((w & 7) | ((mul & 3) << 6) | ((rep & 1) << 8))
+static const reg_t W8 = 0;
+static const reg_t W16 = 1;
+static const reg_t W32 = 2;
+static const reg_t W64 = 3;
+static const reg_t W128 = 4;
+static const reg_t W256 = 5;
+static const reg_t W512 = 6;
+static const reg_t W1024 = 7;
+static const reg_t INT = 0;
+static const reg_t FP = 1;
+#define INT8 VTY(W8, 0, INT)
+#define vIsInt(t) ( VR(t) == INT )
+#define vIsFP(t) ( VR(t) == FP )
+#define vIs8(t, w) ( VW(t) == W8  && w == 1 )
+#define vIs16(t, w) ( (VW(t) == W16  && w == 1) || (VW(t) == W8 && w == 2) )
+#define vIs32(t, w) ( (VW(t) == W32  && w == 1) || (VW(t) == W16 && w == 2) || (VW(t) == W8 && w == 4) )
+#define vIs64(t, w) ( (VW(t) == W64  && w == 1) || (VW(t) == W32 && w == 2) || (VW(t) == W16 && w == 4) || (VW(t) == W8 && w == 8) )
+#define vIs128(t, w) ( (VW(t) == W128  && w == 1) || (VW(t) == W64 && w == 2) || (VW(t) == W32 && w == 4) || (VW(t) == W16 && w == 8) || (VW(t) == W8 && w == 16) )
+#define vIs256(t, w) ( (VW(t) == W256  && w == 1) || (VW(t) == W128 && w == 2) || (VW(t) == W64 && w == 4) || (VW(t) == W32 && w == 8) || (VW(t) == W16 && w == 16) || (VW(t) == W8 && w == 32) )
+#define vIs512(t, w) ( (VW(t) == W512  && w == 1) || (VW(t) == W256 && w == 2) || (VW(t) == W128 && w == 4) || (VW(t) == W64 && w == 8) || (VW(t) == W32 && w == 16) || (VW(t) == W16 && w == 32) || (VW(t) == W8 && w == 64) )
+#define vIs1024(t, w) ( (VW(t) == W1024  && w == 1) || (VW(t) == W512 && w == 2) || (VW(t) == W256 && w == 4) || (VW(t) == W128 && w == 8) || (VW(t) == W64 && w == 16) || (VW(t) == W32 && w == 32) || (VW(t) == W16 && w == 64) || (VW(t) == W8 && w == 128) )
+#define SEW ( vIs8(VSEW, 1) ? 8 : vIs16(VSEW, 1) ? 16 : vIs32(VSEW, 1) ? 32 : vIs64(VSEW, 1) ? 64 : vIs128(VSEW, 1) ? 128 : vIs256(VSEW, 1) ? 256 : vIs512(VSEW, 1) ? 512 : 1024 )
 
-// Assumes no 128 bit fregs
-#define WRITE_FP_VRD(val, OP) (WRITE_VREG(insn.rd(), (VEW(TRD) > VEW(OP) ? velt(freg(val)) : VEW(TRD) == VEW(OP) ? velt(val) : throw trap_illegal_instruction(0) )))
-#define VFS1(OP) (VEW(TRS1)>VEW(OP) ? unbox(VS1.f, OP) : VEW(TRS1) == VEW(OP) ? VS1.f.v[0] : throw trap_illegal_instruction(0))
-#define VFS2(OP) (VEW(TRS2)>VEW(OP) ? unbox(VS2.f, OP) : VEW(TRS2) == VEW(OP) ? VS2.f.v[0] : throw trap_illegal_instruction(0))
-
-#define UIOP (TRS1)
-#define BIOP (std::max(VEW(TRS1), VEW(TRS2)))
-#define TIOP (std::max(VEW(TRS1), std::max(VEW(TRS2), VEW(TRS3))))
-#define WRITE_INT_VRD(val, OP) (WRITE_VREG(insn.rd(), (VEW(TRD) > VEW(OP) ? sext_to(velt(val), OP) : VEW(TRD) == VEW(OP) ? velt(val) : trunc_to(velt(val), OP))))
-#define VIS1(OP) (VEW(TRS1)>VEW(OP) ? trunc_to(VS1, OP).x : VEW(TRS1) == VEW(OP) ? velt(VS1).x : sext_to(VS1, OP).x)
-#define VIS2(OP) (VEW(TRS2)>VEW(OP) ? trunc_to(VS2, OP).x : VEW(TRS2) == VEW(OP) ? velt(VS2).x : sext_to(VS2, OP).x)
-#define VIS3(OP) (VEW(TRS3)>VEW(OP) ? trunc_to(VS3, OP).x : VEW(TRS3) == VEW(OP) ? velt(VS3).x : sext_to(VS3, OP).x)
-#define VIMM (velt(insn.rvv_imm()).x)
-
-// Type permotion and demotion
-#define INTER_TYPE(v1, t1, v2, t2, v3, t3) ({ \
-    vtype_t oT = t1; \
-    if(v1 && vIsFP(t1) && (!v2 || vIsFP(t2)) && (!v3 || vIsFP(t3))) \
-      oT = VTYPE(0, FP, W128);  \
-    oT; })
-
-#define DYN_EXTEND(outT, inT, val) ({ \
-    velt_t outV = velt(val); \
-    if(VEW(inT) < VEW(outT)) \
-      outV = vIsInt(inT) ? velt(sext_xlen(outV.x)) : (vIsUInt(inT) ? velt(zext_xlen(outV.x)) : \
-          (vIsFP(inT) ? (vIs64(inT) ? velt(f64_to_f128(f64(outV.f))) : (vIs32(inT) ? velt(f32_to_f128(f32(outV.f))) : (vIs16(inT) ? velt(f16_to_f128(f16(outV.f))) : \
-            throw trap_illegal_instruction(0)))) : \
-            throw trap_illegal_instruction(0))); \
-    outV; })
-
-// Forced conversion
-#define DYN_CONVERT(outT, val) ({ \
-    velt_t outV = vIsFP(outT) ? (vIs64(outT) ? velt(f64(val)) : (vIs32(outT) ? velt(f32(val)) : (vIs16(outT) ? velt(f16(val)) : throw trap_illegal_instruction(0)))) : \
-                 vIsInt(outT) ? velt(sext_xlen(val)) : (vIsUInt(outT) ? velt(zext_xlen(val)) : throw trap_illegal_instruction(0)); \
-    outV; })
-
-#define DYN_TRUNCATE(outT, inT, val) ({ \
-    velt_t outV = velt(val); \
-    if(VEW(inT) > VEW(outT)) \
-      if(vIsFP(inT) && vIsFP(outT)) \
-        outV = vIs64(outT) ? velt(f128_to_f64(outV.f)) : (vIs32(outT) ? velt(f128_to_f32(outV.f)) : (vIs16(outT) ? velt(f128_to_f16(outV.f)) : \
-            throw trap_illegal_instruction(0))); \
-      else \
-        outV.x = vIs64(outT) ? 0xffffffffffffffff & outV.x : (vIs32(outT) ? 0xffffffff & outV.x : (vIs16(outT) ? 0xffff & outV.x : (vIs8(outT) ? 0xff & outV.x : \
-            throw trap_illegal_instruction(0)))); \
-    outV; })
-
-// Catch invalid fp functions
-#define f128_err(f1, f2) ({ throw trap_illegal_instruction(0); velt((uint64_t) 0); })
-// Operations
-#define DYN_OP2(op, ta, a, tb, b) ({ velt_t outV; \
-  switch(VEREP(ta)) { \
-  case INT: case UINT: \
-    switch(VEREP(tb)) { \
-    case INT: case UINT: outV = velt(op(a.x, b.x)); break;\
-    default: throw trap_illegal_instruction(0); } break; \
+#define DYN_OP2(op, a, b) ({ velt_t outV; \
+  switch(VREP) { \
+  case INT: \
+    outV = velt(op(a, b)); break;\
   case FP: \
-    switch(VEREP(tb)) { \
-    case FP: outV = velt(f128_##op(a.f, b.f)); break;\
+    switch(VSEW) { \
+    case W16: outV = velt(f16_##op(f16(a), f16(b))); break;\
+    case W32: outV = velt(f32_##op(f32(a), f32(b))); break;\
+    case W64: outV = velt(f64_##op(f64(a), f64(b))); break;\
+    default: throw trap_illegal_instruction(0); } break; \
+  default: throw trap_illegal_instruction(0); } \
+  outV; })
+#define DYN_OP3(op, a, b, c) ({ velt_t outV; \
+  switch(VREP) { \
+  case INT: \
+    outV = velt(op(a, b, c)); break;\
+  case FP: \
+    switch(VSEW) { \
+    case W16: outV = velt(f16_##op(f16(a), f16(b), f16(c))); break;\
+    case W32: outV = velt(f32_##op(f32(a), f32(b), f32(c))); break;\
+    case W64: outV = velt(f64_##op(f64(a), f64(b), f64(c))); break;\
     default: throw trap_illegal_instruction(0); } break; \
   default: throw trap_illegal_instruction(0); } \
   outV; })
 
-#define DYN_OP3(op, ta, a, tb, b, tc, c) ({ velt_t outV; \
-  switch(VEREP(ta)) { \
-  case INT: case UINT: \
-    switch(VEREP(tb)) { \
-    case INT: case UINT: \
-      switch(VEREP(tc)) { \
-      case INT: case UINT: outV = velt(op(a.x, b.x, c.x)); break;\
-      default: throw trap_illegal_instruction(0); } break; \
-    default: throw trap_illegal_instruction(0); } break; \
-  case FP: \
-    switch(VEREP(tb)) { \
-    case FP: \
-      switch(VEREP(tc)) { \
-      case FP: outV = velt(f128_##op(a.f, b.f, c.f)); break;\
-      default: throw trap_illegal_instruction(0); } break; \
-    default: throw trap_illegal_instruction(0); } break; \
-  default: throw trap_illegal_instruction(0); } \
-  outV; })
-
-#define DYN_LOAD(a) ({ velt_t outV; \
-    if(vIs128(TRD)) \
-      outV = DYN_LOAD_ST(a, 16); \
-    else if(vIs64(TRD)) \
-      outV = DYN_LOAD_ST(a, 8); \
-    else if (vIs32(TRD)) \
-      outV = DYN_LOAD_ST(a, 4); \
-    else if (vIs16(TRD)) \
-      outV = DYN_LOAD_ST(a, 2); \
-    else if(vIs8(TRD)) \
-      outV = DYN_LOAD_ST(a, 1); \
+#define DYN_LOAD(a, sign) ({ velt_t outV; \
+    outV = DYN_LOAD_TYPE(a, VTYPE, sign); \
+    outV; \
+    })
+#define DYN_LOAD_TYPE(a, type, sign) ({ velt_t outV; \
+    if(vIs64(type, 1)) \
+      outV = DYN_LOAD_ST_TYPE(a, 8, type, sign); \
+    else if (vIs32(type, 1)) \
+      outV = DYN_LOAD_ST_TYPE(a, 4, type, sign); \
+    else if (vIs16(type, 1)) \
+      outV = DYN_LOAD_ST_TYPE(a, 2, type, sign); \
+    else if(vIs8(type, 1)) \
+      outV = DYN_LOAD_ST_TYPE(a, 1, type, sign); \
     else \
       throw trap_illegal_instruction(0);\
     outV; \
     })
-#define DYN_LOAD_ST(a, st) ({ velt_t outV; \
-    outV = DYN_LOAD_ST_TY(TRD, a+eidx*st); \
+#define DYN_LOAD_ST(a, st, sign) ({ velt_t outV; \
+    outV = DYN_LOAD_ST_TYPE(a, st, VTYPE, sign); \
     outV; \
     })
-#define DYN_LOAD_ST_TY(ta, a) ( \
-  vIsFP(ta) ? (vIs64(ta) ? velt(f64(MMU.load_uint64(a))) : vIs32(ta) ? velt(f32(MMU.load_uint32(a))) : vIs16(ta) ? velt(f16(MMU.load_uint16(a))) : vIs128(ta) ? velt((float128_t){MMU.load_uint64(a), MMU.load_uint64(a+8)}) : throw trap_illegal_instruction(0)) : \
-    (vIsUInt(ta) ? (vIs64(ta) ? velt(MMU.load_uint64(a)) : vIs32(ta) ? velt(MMU.load_uint32(a)) : vIs16(ta) ? velt(MMU.load_uint16(a)) : vIs8(ta) ? velt(MMU.load_uint8(a)) : throw trap_illegal_instruction(0)) : \
-    (vIsInt(ta) ? (vIs64(ta) ? velt(MMU.load_int64(a)) : vIs32(ta) ? velt(MMU.load_int32(a)) : vIs16(ta) ? velt(MMU.load_int16(a)) : vIs8(ta) ? velt(MMU.load_int8(a)) : throw trap_illegal_instruction(0)) : \
+#define DYN_LOAD_ST_TYPE(a, st, type, sign) ({ velt_t outV; \
+    fprintf(stderr,"Loading from:%llx\n",a+eidx*st); \
+    outV = DYN_LOAD_ADDR_TYPE(a+eidx*st, type, sign); \
+    outV; \
+    })
+#define DYN_LOAD_ADDR_TYPE(a, type, sign) ( \
+  vIsFP(type) ? (vIs64(type, 1) ? velt(f64(MMU.load_uint64(a))) : vIs32(type, 1) ? velt(f32(MMU.load_uint32(a))) : vIs16(type, 1) ? velt(f16(MMU.load_uint16(a))) : throw trap_illegal_instruction(0)) : \
+    (vIsInt(type) && sign == 1 ? (vIs64(type, 1) ? velt(MMU.load_int64(a)) : vIs32(type, 1) ? velt(MMU.load_int32(a)) : vIs16(type, 1) ? velt(MMU.load_int16(a)) : vIs8(type, 1) ? velt(MMU.load_int8(a)) : throw trap_illegal_instruction(0)) : \
+    (vIsInt(type) && sign == 0 ? (vIs64(type, 1) ? velt(MMU.load_uint64(a)) : vIs32(type, 1) ? velt(MMU.load_uint32(a)) : vIs16(type, 1) ? velt(MMU.load_uint16(a)) : vIs8(type, 1) ? velt(MMU.load_uint8(a)) : throw trap_illegal_instruction(0)) : \
      throw trap_illegal_instruction(0))) )
-//Only useable for 64bit or smaller
-#define DYN_VALUE(ta, a) ( \
-    vIsInt(ta) || vIsUInt(ta) ? a.x : (vIsFP(ta) ? a.f.v[0] : throw trap_illegal_instruction(0)) \
-    )
-#define DYN_STORE(a, tb, b) ({ \
-    if(vIs128(tb)) \
-      DYN_STORE_ST(a, 16, tb, b); \
-    else if(vIs64(tb)) \
-      DYN_STORE_ST(a, 8, tb, b); \
-    else if (vIs32(tb)) \
-      DYN_STORE_ST(a, 4, tb, b); \
-    else if (vIs16(tb)) \
-      DYN_STORE_ST(a, 2, tb, b); \
-    else if(vIs8(tb)) \
-      DYN_STORE_ST(a, 1, tb, b); \
+#define DYN_STORE(a, b) ({ \
+    DYN_STORE_TYPE(a, VTYPE, b); \
+    })
+#define DYN_STORE_TYPE(a, type, b) ({ \
+    if(vIs64(type, 1)) \
+      DYN_STORE_ST_TYPE(a, 8, type, b); \
+    else if (vIs32(type, 1)) \
+      DYN_STORE_ST_TYPE(a, 4, type, b); \
+    else if (vIs16(type, 1)) \
+      DYN_STORE_ST_TYPE(a, 2, type, b); \
+    else if(vIs8(type, 1)) \
+      DYN_STORE_ST_TYPE(a, 1, type, b); \
     else \
       throw trap_illegal_instruction(0);\
     })
-#define DYN_STORE_ST(a, st, tb, b) ({ \
-    if(vIs128(tb)) { \
-      if(!vIsFP(tb)) throw trap_illegal_instruction(0); \
-      DYN_STORE_ST_TY(a, st, float128, b.f); \
-    } else if(vIs64(tb)) \
-      DYN_STORE_ST_TY(a, st, uint64, DYN_VALUE(tb, b)); \
-    else if (vIs32(tb)) \
-      DYN_STORE_ST_TY(a, st, uint32, DYN_VALUE(tb, b)); \
-    else if (vIs16(tb)) \
-      DYN_STORE_ST_TY(a, st, uint16, DYN_VALUE(tb, b)); \
-    else if(vIs8(tb)) { \
-      if(!(vIsInt(tb) || vIsUInt(tb))) throw trap_illegal_instruction(0); \
-      DYN_STORE_ST_TY(a, st, uint8, DYN_VALUE(tb, b)); \
+#define DYN_STORE_ST(a, st, b) ({ \
+    DYN_STORE_ST_TYPE(a, st, VTYPE, b); \
+    })
+#define DYN_STORE_ST_TYPE(a, st, type, b) ({ \
+    if(vIs64(type, 1)) \
+      (MMU.store_uint64(a+eidx*st, b)); \
+    else if (vIs32(type, 1)) \
+      (MMU.store_uint32(a+eidx*st, b)); \
+    else if (vIs16(type, 1)) \
+      (MMU.store_uint16(a+eidx*st, b)); \
+    else if(vIs8(type, 1)) { \
+      (MMU.store_uint8(a+eidx*st, b)); \
     } else \
       throw trap_illegal_instruction(0);\
     })
-#define DYN_STORE_ST_TY(a, st, func, b) ({ \
-    (MMU.store_ ## func(a+eidx*st, b)); \
-    })
 
-//TODO: vinsert and vextract should use integer truncate rules?
+#define DYN_ADD(a, b) DYN_OP2(vecadd, a, b)
+#define DYN_AND(a, b) DYN_OP2(vecand, a, b)
+#define DYN_OR(a, b) DYN_OP2(vecor, a, b)
+#define DYN_XOR(a, b) DYN_OP2(vecxor, a, b)
+#define DYN_DIV(a, b) DYN_OP2(vecdiv, a, b)
+#define DYN_MUL(a, b) DYN_OP2(vecmul, a, b)
+#define DYN_REM(a, b) DYN_OP2(vecrem, a, b)
+#define DYN_SEQ(a, b) DYN_OP2(veceq, a, b)
+#define DYN_SNE(a, b) DYN_OP2(vecne, a, b)
+#define DYN_SLT(a, b) DYN_OP2(veclt, a, b)
+#define DYN_SGE(a, b) DYN_OP2(vecge, a, b)
+#define DYN_SUB(a, b) DYN_OP2(vecsub, a, b)
+#define DYN_SL(a, b) DYN_OP2(vecsll, a, b)
+#define DYN_SR(a, b) DYN_OP2(vecsrl, a, b)
+#define DYN_MAX(a, b) DYN_OP2(vecmax, a, b)
+#define DYN_MIN(a, b) DYN_OP2(vecmin, a, b)
+#define DYN_MADD(a, b, c) DYN_OP3(mulAdd, a, b, c)
+#define DYN_MSUB(a, b, c) DYN_OP3(mulSub, a, b, c)
+#define DYN_NMADD(a, b, c) DYN_OP3(negMulAdd, a, b, c)
+#define DYN_NMSUB(a, b, c) DYN_OP3(negMulSub, a, b, c)
 
-
-// Infix helpers
 #define vecadd(a, b) (a + b)
 #define vecand(a, b) (a & b)
 #define vecor(a, b) (a | b)
@@ -584,65 +540,27 @@ inline reg_t vfastcfg(reg_t imm, reg_t old_cfg) {
 #define vecsrl(a, b) ((a) >> (b))
 #define vecmax(a, b) (a > b ? a : b)
 #define vecmin(a, b) (a < b ? a : b)
-// Redirect for INT and UINT
+// Redirect for INT
 #define mulAdd(a, b, c) ( a * b + c )
 #define mulSub(a, b, c) ( a * b + (-c) )
 #define negMulAdd(a, b, c) ( (-a) * b + (-c) )
 #define negMulSub(a, b, c) ( (-a) * b + c )
-// f128 helpers
-#define f128_mulSub(a, b, c) ( f128_mulAdd(a, b, f128_negate(c)) )
-#define f128_negMulAdd(a, b, c) ( f128_mulAdd(f128_negate(a), b, f128_negate(c)) )
-#define f128_negMulSub(a, b, c) ( f128_mulAdd(f128_negate(a), b, c) )
-#define f128_vecadd(a, b) (f128_add(a, b))
-#define f128_vecsub(a, b) (f128_sub(a, b))
-#define f128_vecmul(a, b) (f128_mul(a, b))
-#define f128_vecdiv(a, b) (f128_div(a, b))
-#define f128_vecrem(a, b) (f128_rem(a, b))
-#define f128_veceq(a, b) (f128_eq(a, b))
-#define f128_vecne(a, b) (!f128_eq(a, b))
-#define f128_veclt(a, b) (f128_lt(a, b))
-#define f128_vecge(a, b) (f128_le(b, a))
-#define f128_vecsll(a, b) (f128_err(a, b))
-#define f128_vecsrl(a, b) (f128_err(a, b))
-#define f128_vecand(a, b) (f128_err(a, b))
-#define f128_vecor(a, b) (f128_err(a, b))
-#define f128_vecxor(a, b) (f128_err(a, b))
-#define f128_vecmax(a, b) ({ \
-    bool greater = f128_lt_quiet(b, a) || (f128_eq(b, a) && (f128(b).v[1] & F64_SIGN));\
-    (isNaNF128(a) && isNaNF128(b)) ? defaultNaNF128() : \
-    (greater || isNaNF128(b) ? a : b); \
-    })
-#define f128_vecmin(a, b) ({ \
-    bool less = f128_lt_quiet(a, b) || (f128_eq(a, b) && (f128(a).v[1] & F64_SIGN));\
-    (isNaNF128(a) && isNaNF128(b)) ? defaultNaNF128() : \
-    (less || isNaNF128(b) ? a : b); \
-    })
-#define DYN_ADD(ta, a, tb, b) DYN_OP2(vecadd, ta, a ## _12, tb, b ## _12)
-#define DYN_ADDI(ta, a, b) DYN_OP2(vecadd, ta, a ## _12, ta, b)
-#define DYN_AND(ta, a, tb, b) DYN_OP2(vecand, ta, a ## _12, tb, b ## _12)
-#define DYN_ANDI(ta, a, b) DYN_OP2(vecand, ta, a ## _12, ta, b)
-#define DYN_OR(ta, a, tb, b) DYN_OP2(vecor, ta, a ## _12, tb, b ## _12)
-#define DYN_ORI(ta, a, b) DYN_OP2(vecor, ta, a ## _12, ta, b)
-#define DYN_XOR(ta, a, tb, b) DYN_OP2(vecxor, ta, a ## _12, tb, b ## _12)
-#define DYN_XORI(ta, a, b) DYN_OP2(vecxor, ta, a ## _12, ta, b)
-#define DYN_DIV(ta, a, tb, b) DYN_OP2(vecdiv, ta, a ## _12, tb, b ## _12)
-#define DYN_MUL(ta, a, tb, b) DYN_OP2(vecmul, ta, a ## _12, tb, b ## _12)
-#define DYN_REM(ta, a, tb, b) DYN_OP2(vecrem, ta, a ## _12, tb, b ## _12)
-#define DYN_SEQ(ta, a, tb, b) DYN_OP2(veceq, ta, a ## _12, tb, b ## _12)
-#define DYN_SNE(ta, a, tb, b) DYN_OP2(vecne, ta, a ## _12, tb, b ## _12)
-#define DYN_SLT(ta, a, tb, b) DYN_OP2(veclt, ta, a ## _12, tb, b ## _12)
-#define DYN_SGE(ta, a, tb, b) DYN_OP2(vecge, ta, a ## _12, tb, b ## _12)
-#define DYN_SUB(ta, a, tb, b) DYN_OP2(vecsub, ta, a ## _12, tb, b ## _12)
-#define DYN_SL(ta, a, tb, b) DYN_OP2(vecsll, ta, a ## _12, tb, b ## _12)
-#define DYN_SLI(ta, a, b) DYN_OP2(vecsll, ta, a ## _12, ta, b)
-#define DYN_SR(ta, a, tb, b) DYN_OP2(vecsrl, ta, a ## _12, tb, b ## _12)
-#define DYN_SRI(ta, a, b) DYN_OP2(vecsrl, ta, a ## _12, ta, b)
-#define DYN_MAX(ta, a, tb, b) DYN_OP2(vecmax, ta, a ## _12, ta, b ## _12)
-#define DYN_MIN(ta, a, tb, b) DYN_OP2(vecmin, ta, a ## _12, ta, b ## _12)
-#define DYN_MADD(ta, a, tb, b, tc, c) DYN_OP3(mulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
-#define DYN_MSUB(ta, a, tb, b, tc, c) DYN_OP3(mulSub, ta, a ## _123, tb, b ## _123, tc, c ## _123)
-#define DYN_NMADD(ta, a, tb, b, tc, c) DYN_OP3(negMulAdd, ta, a ## _123, tb, b ## _123, tc, c ## _123)
-#define DYN_NMSUB(ta, a, tb, b, tc, c) DYN_OP3(negMulSub, ta, a ## _123, tb, b ## _123, tc, c ## _123)
+// Redirect for FP
+#define f16_vecadd(a, b) (f16_add(a, b))
+#define f32_vecadd(a, b) (f32_add(a, b))
+#define f64_vecadd(a, b) (f64_add(a, b))
+
+inline velt_t velt(float16_t f) { return { .h[0]=f.v }; }
+inline velt_t velt(float32_t f) { return { .w[0]=f.v }; }
+inline velt_t velt(float64_t f) { return { .d=f.v }; }
+inline velt_t velt(uint8_t x)   { return { .b[0]=x }; }
+inline velt_t velt(uint16_t x)  { return { .h[0]=x }; }
+inline velt_t velt(uint32_t x)  { return { .w[0]=x }; }
+inline velt_t velt(uint64_t x)  { return { .d=x }; }
+inline velt_t velt(int8_t x)   { return { .b[0]=(uint8_t)x }; }
+inline velt_t velt(int16_t x)  { return { .h[0]=(uint16_t)x }; }
+inline velt_t velt(int32_t x)  { return { .w[0]=(uint32_t)x }; }
+inline velt_t velt(int64_t x)  { return { .d=(uint64_t)x }; }
 /* End Vector extension */
 
 #define validate_csr(which, write) ({ \

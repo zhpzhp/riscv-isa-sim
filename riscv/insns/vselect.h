@@ -1,3 +1,0 @@
-VL_LOOP
-  WRITE_VRD(1,0,0, DYN_EXTEND(TIN_1, TRS1, READ_VREG_ELEM(insn.rs1(), VS2.x)));
-}
