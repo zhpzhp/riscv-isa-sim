@@ -103,10 +103,10 @@ public:
   uint64_t rvc_rs2s() { return 8 + x(2, 3); }
 
   int64_t rvv_imm() { return xs(20, 5); }
-  int64_t rvv_uload_imm() { return (x(20, 5) + (xs(30, 2) << 5)); }
-  int64_t rvv_load_imm() { return xs(30, 2); }
-  int64_t rvv_ustore_imm() { return (x(20, 5) + (xs(10, 2) << 5)); }
-  int64_t rvv_store_imm() { return xs(10, 2); }
+  int64_t rvv_uload_imm() { return (x(20, 5) + (x(30, 2) << 5)); }
+  int64_t rvv_load_imm() { return x(30, 2); }
+  int64_t rvv_ustore_imm() { return (x(20, 5) + (x(10, 2) << 5)); }
+  int64_t rvv_store_imm() { return x(10, 2); }
   uint64_t rvv_conf_imm() { return (x(20, 7) << 3) + (x(12,3)); }
   uint64_t rvv_mask() { return x(25, 2); }
 private:
