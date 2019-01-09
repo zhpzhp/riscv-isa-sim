@@ -1,0 +1,3 @@
+VL_LOOP
+  DYN_STORE_ST_TYPE(RS1 + ((int16_t)VS2) + VSIMM(2), 0, INT16, VS3);
+}

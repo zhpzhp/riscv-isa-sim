@@ -1,0 +1,3 @@
+VL_LOOP
+  DYN_STORE_ST(RS1 + VS2 + VSIMM(1), 0, VS3);
+}

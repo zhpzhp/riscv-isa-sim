@@ -385,6 +385,10 @@ private:
               vIs16(VSEW, 1) ? velt(insn.rvv_imm()).h[0] : \
               vIs32(VSEW, 1) ? velt(insn.rvv_imm()).w[0] : \
               velt(insn.rvv_imm()).d)
+#define VLIMM(scale) (insn.rvv_load_imm() * scale)
+#define VULIMM(scale) (insn.rvv_uload_imm() * scale)
+#define VSIMM(scale) (insn.rvv_store_imm() * scale)
+#define VUSIMM(scale) (insn.rvv_ustore_imm() * scale)
 
 #define VTYPE (STATE.vtype)
 #define VW(t) (t & 7)
@@ -404,6 +408,8 @@ static const reg_t W1024 = 7;
 static const reg_t INT = 0;
 static const reg_t FP = 1;
 #define INT8 VTY(W8, 0, INT)
+#define INT16 VTY(W16, 0, INT)
+#define INT32 VTY(W32, 0, INT)
 #define vIsInt(t) ( VR(t) == INT )
 #define vIsFP(t) ( VR(t) == FP )
 #define vIs8(t, w) ( VW(t) == W8  && w == 1 )

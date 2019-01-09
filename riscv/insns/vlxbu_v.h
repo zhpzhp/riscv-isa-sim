@@ -1,0 +1,3 @@
+VL_LOOP
+  WRITE_VRD_TYPE(DYN_LOAD_ST_TYPE(RS1 + ((int8_t)VS2) + VLIMM(1), 0, INT8, 0), W8);
+}

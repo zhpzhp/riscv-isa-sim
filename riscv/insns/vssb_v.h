@@ -1,3 +1,3 @@
 VL_LOOP
-  DYN_STORE_ST_TYPE(RS1 + insn.rvv_store_imm(), RS2, INT8, VS3);
+  DYN_STORE_ST_TYPE(RS1 + VSIMM(1), RS2, INT8, VS3);
 }

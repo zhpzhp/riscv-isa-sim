@@ -1,3 +1,3 @@
 VL_LOOP
-  DYN_STORE(RS1 + insn.rvv_ustore_imm(), VS3);
+  DYN_STORE(RS1 + VUSIMM(1), VS3);
 }

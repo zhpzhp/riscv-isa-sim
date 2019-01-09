@@ -1,3 +1,3 @@
 VL_LOOP
-  WRITE_VRD_TYPE(DYN_LOAD_TYPE(RS1 + insn.rvv_uload_imm(), INT8, 1), W8);
+  WRITE_VRD_TYPE(DYN_LOAD_TYPE(RS1 + VULIMM(1), INT8, 1), W8);
 }
