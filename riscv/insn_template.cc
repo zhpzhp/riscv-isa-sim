@@ -70,7 +70,6 @@ reg_t rv64i_NAME(processor_t* p, insn_t insn, reg_t pc)
   bool valid_rs1=0,valid_rs2=0,valid_rd=0,valid_imm=0,valid_mem=0,op_mem=0,branch=0,is_fence=0,is_env=0,is_csr=0,write_csr=0,is_branch=0;
   unsigned int bits_rs1=0,bits_rs2=0,bits_rd=0,bits_imm=0,bits_mem=0;
   bool enable_print=0;
-  reg_t npc = sext_xlen(pc + insn_length(OPCODE));
   auto cal_bits=[](unsigned long int a) {return 1;};
   reg_t npc = sext_xlen(pc + insn_length(OPCODE));
   #include "insns/NAME.h"
@@ -91,7 +90,6 @@ reg_t rv32e_NAME(processor_t* p, insn_t insn, reg_t pc)
   bool valid_rs1=0,valid_rs2=0,valid_rd=0,valid_imm=0,valid_mem=0,op_mem=0,branch=0,is_fence=0,is_env=0,is_csr=0,write_csr=0,is_branch=0;
   unsigned int bits_rs1=0,bits_rs2=0,bits_rd=0,bits_imm=0,bits_mem=0;
   bool enable_print=0;
-  reg_t npc = sext_xlen(pc + insn_length(OPCODE));
   auto cal_bits=[](unsigned long int a) {return 1;};
   reg_t npc = sext_xlen(pc + insn_length(OPCODE));
   #include "insns/NAME.h"
@@ -109,7 +107,6 @@ reg_t rv64e_NAME(processor_t* p, insn_t insn, reg_t pc)
   bool valid_rs1=0,valid_rs2=0,valid_rd=0,valid_imm=0,valid_mem=0,op_mem=0,branch=0,is_fence=0,is_env=0,is_csr=0,write_csr=0,is_branch=0;
   unsigned int bits_rs1=0,bits_rs2=0,bits_rd=0,bits_imm=0,bits_mem=0;
   bool enable_print=0;
-  reg_t npc = sext_xlen(pc + insn_length(OPCODE));
   auto cal_bits=[](unsigned long int a) {return 1;};
   reg_t npc = sext_xlen(pc + insn_length(OPCODE));
   #include "insns/NAME.h"
